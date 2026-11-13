@@ -255,15 +255,10 @@ class StorageService {
       }
     }
 
-    // Fechas del ciclo o días de clase: ajustar el calendario de sesiones
-    const cambiaCalendario =
-      anterior.fecha_inicio_ciclo !== updatedGrupo.fecha_inicio_ciclo ||
-      anterior.fecha_fin_ciclo !== updatedGrupo.fecha_fin_ciclo ||
-      [...(anterior.dias_semana || [])].sort().join(',') !== [...updatedGrupo.dias_semana].sort().join(',');
-
-    const resumen = cambiaCalendario
-      ? this.reconciliarSesiones(updatedGrupo)
-      : { sesionesAgregadas: 0, sesionesEliminadas: 0, sesionesConservadas: 0 };
+    // Ajustar el calendario de sesiones en CADA guardado (no solo si cambian fechas o días).
+    // Es idempotente, y así se reparan guardados parciales: la cola no es transaccional y
+    // un taller puede quedar guardado con sus fechas nuevas pero sin sus sesiones.
+    const resumen = this.reconciliarSesiones(updatedGrupo);
 
     notifyDataChange();
     return { grupo: updatedGrupo, ...resumen };
@@ -346,6 +341,7 @@ class StorageService {
       cerrada: false,
       fecha_cierre: null,
       tema: `Sesión de ${grupo.nombre}`,
+      extraordinaria: false,
     };
   }
 

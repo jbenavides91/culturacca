@@ -32,6 +32,11 @@ interface TableDef {
   tags: string[];
   /** Tabla de solo inserción (sin UPDATE en RLS): usar ON CONFLICT DO NOTHING */
   insertOnly?: boolean;
+  /**
+   * Valores para columnas NOT NULL cuando la fila de la app no trae el campo.
+   * Sin esto, project() enviaría null y Postgres rechazaría todo el lote.
+   */
+  defaults?: Row;
 }
 
 export const TABLES: Record<StorageKey, TableDef> = {
@@ -70,6 +75,7 @@ export const TABLES: Record<StorageKey, TableDef> = {
     table: 'sesiones',
     columns: ['id', 'grupo_id', 'fecha', 'hora_inicio', 'hora_fin', 'cerrada', 'fecha_cierre', 'tema', 'google_calendar_event_id', 'extraordinaria'],
     tags: ['sesiones', 'alertas'],
+    defaults: { cerrada: false, extraordinaria: false },
   },
   aa_asistencias: {
     table: 'asistencias',
@@ -158,12 +164,13 @@ function normalizeFromDb(row: Row): Row {
   return out;
 }
 
-/** Proyección con todas las columnas conocidas (ausentes → null) */
+/** Proyección con todas las columnas conocidas (ausentes → default de la tabla, o null) */
 function project(key: StorageKey, row: Row): Row {
   const out: Row = {};
+  const defaults = TABLES[key].defaults;
   for (const col of TABLES[key].columns) {
     const v = row[col];
-    out[col] = v === undefined ? null : v;
+    out[col] = v === undefined ? (defaults && col in defaults ? defaults[col] : null) : v;
   }
   return out;
 }

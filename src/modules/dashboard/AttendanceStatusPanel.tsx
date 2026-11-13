@@ -319,14 +319,9 @@ export const AttendanceStatusPanel: React.FC<AttendanceStatusPanelProps> = ({
     <section className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs overflow-hidden">
       {/* Encabezado */}
       <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-start gap-2.5">
-          <CalendarCheck className="w-5 h-5 text-[#4F46E5] dark:text-[#818CF8] shrink-0 mt-0.5" />
-          <div>
-            <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Estatus de Toma de Asistencia</h2>
-            <p className="text-xs text-[#667085] dark:text-[#94A3B8] mt-0.5">
-              Verifica si en cada taller se pasó lista en las sesiones del período seleccionado.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <CalendarCheck className="w-5 h-5 text-[#4F46E5] dark:text-[#818CF8] shrink-0" />
+          <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Estatus de Toma de Asistencia</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           {atrasadas > 0 && (
