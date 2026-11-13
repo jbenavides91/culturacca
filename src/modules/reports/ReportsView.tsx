@@ -11,8 +11,10 @@ import {
   Receipt,
   CalendarCheck,
   NotebookPen,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
-import { AlertaEstudiante, Grupo, Perfil } from '../../types/attendance';
+import { AlertaEstudiante, Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { exportService } from '../../services/export.service';
 import { ReceiptsHistoryTab } from './ReceiptsHistoryTab';
@@ -24,6 +26,27 @@ interface ReportsViewProps {
 }
 
 type ReportTab = 'asistencia' | 'recibos' | 'anecdotario';
+
+/** Ausencia o justificación de un alumno en una sesión cerrada */
+interface Incidencia {
+  fecha: string; // YYYY-MM-DD
+  estatus: 'AUSENTE' | 'JUSTIFICADO';
+  motivo?: string;
+  extra: boolean;
+}
+
+/** Fecha local a partir de YYYY-MM-DD (sin new Date('YYYY-MM-DD'), que corre un día en UTC-6) */
+const fechaLocal = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+const fechaChip = (iso: string) =>
+  fechaLocal(iso).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+const fechaLarga = (iso: string) =>
+  fechaLocal(iso).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const fechaNumerica = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+const MAX_CHIPS = 4;
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const availableTabs: ReportTab[] =
@@ -40,6 +63,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const [alertas, setAlertas] = useState<AlertaEstudiante[]>([]);
   const [config, setConfig] = useState(storageService.getConfiguracion());
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [sesiones, setSesiones] = useState<Sesion[]>([]);
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
+  const [filasAbiertas, setFilasAbiertas] = useState<Set<string>>(new Set());
 
   const loadData = () => {
     let allGrupos = storageService.getGrupos();
@@ -49,6 +75,51 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
     setGrupos(allGrupos);
     setAlertas(storageService.calcularAlertasEstudiantes());
     setConfig(storageService.getConfiguracion());
+    setSesiones(storageService.getSesiones());
+    setAsistencias(storageService.getAsistencias());
+  };
+
+  /**
+   * Fechas de ausencia y justificación por alumno y taller.
+   * Solo sesiones cerradas, igual que las alertas, para que cuadren con "Faltas Registradas".
+   */
+  const incidenciasPorFila = useMemo(() => {
+    const sesionPorId = new Map(sesiones.filter((s) => s.cerrada).map((s) => [s.id, s]));
+    const mapa = new Map<string, Incidencia[]>();
+    asistencias.forEach((a) => {
+      if (a.estatus !== 'AUSENTE' && a.estatus !== 'JUSTIFICADO') return;
+      const s = sesionPorId.get(a.sesion_id);
+      if (!s) return;
+      const clave = `${a.estudiante_id}|${s.grupo_id}`;
+      if (!mapa.has(clave)) mapa.set(clave, []);
+      mapa.get(clave)!.push({
+        fecha: s.fecha,
+        estatus: a.estatus,
+        motivo: a.motivo_justificacion || undefined,
+        extra: !!s.extraordinaria,
+      });
+    });
+    mapa.forEach((lista) => lista.sort((x, y) => x.fecha.localeCompare(y.fecha)));
+    return mapa;
+  }, [sesiones, asistencias]);
+
+  const incidenciasDe = (a: AlertaEstudiante) => incidenciasPorFila.get(`${a.estudiante_id}|${a.grupo_id}`) || [];
+
+  const alternarFila = (clave: string) =>
+    setFilasAbiertas((prev) => {
+      const next = new Set(prev);
+      if (next.has(clave)) next.delete(clave);
+      else next.add(clave);
+      return next;
+    });
+
+  /** Texto plano para la vista de impresión: "A: 12/11, 19/11 · J: 26/11" */
+  const textoIncidencias = (lista: Incidencia[]) => {
+    const aus = lista.filter((i) => i.estatus === 'AUSENTE').map((i) => fechaNumerica(i.fecha));
+    const jus = lista.filter((i) => i.estatus === 'JUSTIFICADO').map((i) => fechaNumerica(i.fecha));
+    return [aus.length ? `A: ${aus.join(', ')}` : '', jus.length ? `J: ${jus.join(', ')}` : '']
+      .filter(Boolean)
+      .join(' · ') || '—';
   };
 
   useEffect(() => {
@@ -86,7 +157,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   }, [filteredAlertas]);
 
   const handleExportExcel = () => {
-    exportService.exportConsolidatedExcel(selectedGrupoId);
+    // Solo los talleres visibles para el rol (un docente exporta únicamente los suyos)
+    exportService.exportConsolidatedExcel(selectedGrupoId, grupos.map((g) => g.id));
   };
 
   const handlePrint = () => {
@@ -148,6 +220,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                     <th className="p-2.5">Taller Asignado</th>
                     <th className="p-2.5 text-center">Faltas</th>
                     <th className="p-2.5 text-center">% Inasistencia</th>
+                    <th className="p-2.5">Fechas (A / J)</th>
                     <th className="p-2.5 text-right">Estatus</th>
                   </tr>
                 </thead>
@@ -159,6 +232,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                       <td className="p-2.5">{a.grupo_nombre}</td>
                       <td className="p-2.5 text-center font-bold text-rose-600">{a.total_ausencias}</td>
                       <td className="p-2.5 text-center font-mono">{a.porcentaje_inasistencia}%</td>
+                      <td className="p-2.5 font-mono text-[11px]">{textoIncidencias(incidenciasDe(a))}</td>
                       <td className="p-2.5 text-right font-bold">
                         {a.nivel_alerta === 'CRITICA' ? 'ALERTA CRÍTICA' : a.nivel_alerta === 'ADVERTENCIA' ? 'ADVERTENCIA' : 'REGULAR'}
                       </td>
@@ -354,24 +428,46 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                 <th className="py-3.5 px-4">Taller Vespertino</th>
                 <th className="py-3.5 px-4 text-center">Faltas Registradas</th>
                 <th className="py-3.5 px-4 text-center">% Inasistencia</th>
+                <th className="py-3.5 px-4 min-w-[220px]">Fechas de inasistencia</th>
                 <th className="py-3.5 px-5 text-right">Estatus de Alerta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E7EAF0] dark:divide-[#2B3442] text-xs">
               {filteredAlertas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#667085] dark:text-[#94A3B8]">
+                  <td colSpan={6} className="py-12 text-center text-[#667085] dark:text-[#94A3B8]">
                     No hay registros de alerta para el taller seleccionado.
                   </td>
                 </tr>
               ) : (
-                filteredAlertas.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-[#151A22]/70 transition-colors">
+                filteredAlertas.map((item) => {
+                  const clave = `${item.estudiante_id}|${item.grupo_id}`;
+                  const incidencias = incidenciasDe(item);
+                  const abierta = filasAbiertas.has(clave);
+                  const ausencias = incidencias.filter((i) => i.estatus === 'AUSENTE').length;
+                  const justificaciones = incidencias.length - ausencias;
+                  return (
+                  <React.Fragment key={clave}>
+                  <tr
+                    onClick={incidencias.length > 0 ? () => alternarFila(clave) : undefined}
+                    className={`hover:bg-slate-50/70 dark:hover:bg-[#151A22]/70 transition-colors ${
+                      incidencias.length > 0 ? 'cursor-pointer' : ''
+                    } ${abierta ? 'bg-slate-50/70 dark:bg-[#151A22]/70' : ''}`}
+                    aria-expanded={incidencias.length > 0 ? abierta : undefined}
+                  >
                     <td className="py-3.5 px-5">
-                      <div className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
-                        {item.estudiante_nombre}
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 mt-0.5 shrink-0 text-[#667085] dark:text-[#94A3B8]">
+                          {incidencias.length > 0 &&
+                            (abierta ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />)}
+                        </span>
+                        <div>
+                          <div className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
+                            {item.estudiante_nombre}
+                          </div>
+                          <span className="text-[11px] font-mono text-[#667085] dark:text-[#94A3B8]">{item.matricula}</span>
+                        </div>
                       </div>
-                      <span className="text-[11px] font-mono text-[#667085] dark:text-[#94A3B8]">{item.matricula}</span>
                     </td>
 
                     <td className="py-3.5 px-4 text-xs font-medium text-[#172033] dark:text-[#F1F5F9]">
@@ -391,6 +487,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                         {item.total_ausencias}
                       </span>
                       <span className="text-slate-400 text-[11px]"> / {item.sesiones_cerradas} sesiones</span>
+                      {item.total_justificadas > 0 && (
+                        <span className="block text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                          {item.total_justificadas} justif.
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-center font-mono text-xs tabular-nums">
@@ -413,6 +514,45 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                       </div>
                     </td>
 
+                    {/* Fechas de ausencia (A) y justificación (J) */}
+                    <td className="py-3 px-4">
+                      {incidencias.length === 0 ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {incidencias.slice(0, abierta ? 0 : MAX_CHIPS).map((inc) => (
+                            <span
+                              key={inc.fecha}
+                              title={
+                                inc.estatus === 'JUSTIFICADO'
+                                  ? `Justificada: ${fechaLarga(inc.fecha)}${inc.motivo ? ` · Motivo: ${inc.motivo}` : ''}`
+                                  : `Ausente: ${fechaLarga(inc.fecha)}`
+                              }
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap capitalize ${
+                                inc.estatus === 'AUSENTE'
+                                  ? 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900'
+                                  : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900'
+                              }`}
+                            >
+                              <span className="font-bold">{inc.estatus === 'AUSENTE' ? 'A' : 'J'}</span>
+                              {fechaChip(inc.fecha)}
+                              {inc.extra && <span className="text-violet-600 dark:text-violet-400 normal-case">·Extra</span>}
+                            </span>
+                          ))}
+                          {!abierta && incidencias.length > MAX_CHIPS && (
+                            <span className="text-[10px] font-semibold text-[#4F46E5] dark:text-[#818CF8]">
+                              +{incidencias.length - MAX_CHIPS} más
+                            </span>
+                          )}
+                          {abierta && (
+                            <span className="text-[10px] font-semibold text-[#4F46E5] dark:text-[#818CF8]">
+                              Ver detalle abajo
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
                     <td className="py-3.5 px-5 text-right">
                       {item.nivel_alerta === 'CRITICA' ? (
                         <span className="bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-[10px] font-bold px-2 py-0.5 rounded inline-flex items-center space-x-1">
@@ -431,7 +571,58 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                       )}
                     </td>
                   </tr>
-                ))
+
+                  {/* Detalle desplegable con todas las fechas y los motivos */}
+                  {abierta && incidencias.length > 0 && (
+                    <tr className="bg-[#F7F8FA]/70 dark:bg-[#151A22]/60">
+                      <td colSpan={6} className="px-5 sm:pl-12 py-3">
+                        <p className="text-[11px] font-semibold text-[#667085] dark:text-[#94A3B8] mb-2">
+                          <span className="text-rose-600 dark:text-rose-400">
+                            {ausencias} {ausencias === 1 ? 'ausencia' : 'ausencias'}
+                          </span>
+                          {' · '}
+                          <span className="text-amber-600 dark:text-amber-400">
+                            {justificaciones} {justificaciones === 1 ? 'justificación' : 'justificaciones'}
+                          </span>
+                          <span className="font-normal"> · solo sesiones cerradas</span>
+                        </p>
+                        <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                          {incidencias.map((inc) => (
+                            <li
+                              key={inc.fecha}
+                              className="flex items-start gap-2 p-2 rounded-lg bg-white dark:bg-[#1B222D] border border-[#E7EAF0] dark:border-[#2B3442]"
+                            >
+                              <span
+                                className={`shrink-0 w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white ${
+                                  inc.estatus === 'AUSENTE' ? 'bg-rose-600' : 'bg-amber-600'
+                                }`}
+                              >
+                                {inc.estatus === 'AUSENTE' ? 'A' : 'J'}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-[#172033] dark:text-[#F1F5F9] capitalize">
+                                  {fechaLarga(inc.fecha)}
+                                  {inc.extra && (
+                                    <span className="ml-1.5 normal-case text-[9px] font-bold px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300">
+                                      Extra
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[11px] text-[#667085] dark:text-[#94A3B8]">
+                                  {inc.estatus === 'AUSENTE'
+                                    ? 'Ausente'
+                                    : `Justificada${inc.motivo ? `: ${inc.motivo}` : ' (sin motivo registrado)'}`}
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

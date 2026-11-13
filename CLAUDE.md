@@ -74,6 +74,15 @@ Workshops are assigned to teachers from the Talleres form (`asignarTallerADocent
 - `notification.service.ts`: sends absence emails via the Gmail REST API with an idempotency key and exponential-backoff retry; with no token it simulates an "SMTP institucional" send. Each attempt yields a `LogNotificacion`.
 - `calendar.service.ts`: creates Google Calendar events.
 - `export.service.ts`: Excel export via `xlsx`.
+  - `exportGroupToExcel(grupoId)` exports a single workshop's matrix (from Toma de Asistencia, or from Reportes → Matriz with one workshop selected).
+  - `exportConsolidatedExcel('TODOS', gruposPermitidos)` builds a workbook with **4 fixed sheets, never one tab per workshop**:
+    - Resumen Institucional;
+    - Resumen por Taller (one row per workshop with totals and alerts);
+    - Matriz Consolidada (one row per student and workshop, with absence and justified dates and the alert level; it replaced the old "Alertas" sheet);
+    - Detalle por Sesión (long format, one row per student and closed session, with status and justification reason).
+  - Every table sheet has an `!autofilter` and `!cols` widths, so users filter by Taller or Fecha in Excel.
+  - `ReportsView` passes the role's visible workshop ids, so a PROFESOR exports only their own.
+  - The consolidated export follows the screen rules: only closed sessions count, and attendances are indexed in a `Map` (`sesion_id|estudiante_id`).
 
 **Institution-wide settings come from `configuracion`, never hard-coded**: use `nombreInstitucion()` and `cicloActual()` from `src/utils/institucion.ts` (emails, Excel exports, Calendar events, receipts, certificates, sidebar). The enrollment contract is a template stored in `configuracion.plantilla_contrato` (null = built-in default), edited in Configuración → Contrato (`modules/settings/ContractTemplateTab.tsx`). `src/utils/contractTemplate.ts` renders `{{variables}}`, where an UPPERCASE variable name means an uppercased value, and `VARIABLES_CONTRATO` lists the valid keys. Callers use `generateInstitutionalContractText(data)`.
 
@@ -119,8 +128,18 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
     - The range is part of the cache key under the `alertas` tag.
   - Shared pieces live in `attendanceStatus.shared.tsx`. Those are `ESTADOS`, `FilaEstatus`, `FilaSesion`, `BadgeExtra`, and the UTC date helpers on `YYYY-MM-DD` strings (`sumarDias`, `lunesDe`, `inicioDeMes`, `finDeMes`, `sumarMeses`). Use them instead of `new Date('YYYY-MM-DD')`.
 - **Reportes** has three tabs:
-  - **Matriz de Asistencia**: ADMIN and PROFESOR.
+  - **Matriz de Asistencia**: ADMIN and PROFESOR. One row per student and workshop, taken from `calcularAlertasEstudiantes`.
+    - The "Fechas de inasistencia" column lists the dates of each absence (red "A" chip) and justification (amber "J" chip, with the reason in the tooltip). Dates are built in `incidenciasPorFila`, keyed by `estudiante_id|grupo_id`.
+    - Only **closed** sessions count, the same rule as the alert totals, so the number of "A" chips matches "Faltas Registradas". Extraordinary sessions are tagged "Extra".
+    - The column shows up to 4 chips plus "+N más". Clicking the row expands a detail with every date in long form and the justification reason.
+    - "Faltas Registradas" also shows "N justif.".
+    - The printable document adds a plain "Fechas (A / J)" column, for example "A: 12/11, 19/11 · J: 26/11".
+    - Dates are parsed from `YYYY-MM-DD` as local dates.
   - **Historial de Recibos y Pagos Contables** (`ReceiptsHistoryTab`): ADMIN and CAJERO. CAJERO sees only this tab.
+    - It filters by payment date: Todo (default), Hoy, Esta semana, Este mes, or Rango (Desde/Hasta, both optional).
+    - The date is the local date of `fecha_pago`, falling back to `fecha_aceptacion`, the same rule as Caja. Records without either date appear only under "Todo".
+    - Text search applies on top of the date filter.
+    - The KPI cards (Recaudación, Recibos) reflect the chosen period, not the text search. Recaudación sums `Number(monto_arancel)` and is shown with `formatearMonto`.
   - **Anecdotario** (`AnecdotarioHistoryTab`): ADMIN and PROFESOR. A full-width, alphabetical list of all students (search by name or matrícula, workshop filter, "Solo con anotaciones", "Incluir bajas") with per-type counters, total and date of the last note. Clicking a student opens `AnecdotarioAlumnoModal` (`modules/reports/`) with that student's history grouped by month.
     - The modal filters by type (chips with counts), dates (Este mes / Últimos 3 meses / Todo / Rango, on the local date of `creado_en`) and text. Its filters reset each time it opens. The shared helpers (`PERIODOS`, `rangoDePeriodo`, `mesDe`, `nombreCompleto`, `nombreTallerDe`, `TIPOS_LISTA`) are exported from that file.
     - The tab exports the notes of the listed students, and the modal exports its filtered history, both via `exportService.exportAnecdotario`. ADMIN can edit (type and text, inline) and delete notes from the modal; the note then shows "Editado por … el …".
