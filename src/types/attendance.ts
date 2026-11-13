@@ -154,6 +154,9 @@ export interface Anotacion {
   tipo: TipoAnotacion;
   descripcion: string;
   creado_en: string;
+  /** Última corrección hecha por Dirección (solo ADMIN puede editar) */
+  editado_en?: string;
+  editado_por_nombre?: string;
 }
 
 export type PeriodoArancel = 'MENSUAL' | 'CICLO';

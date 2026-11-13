@@ -1514,6 +1514,29 @@ class StorageService {
     return nueva;
   }
 
+  /**
+   * Corrige el tipo y/o la descripción de una anotación (solo ADMIN; la RLS y los
+   * privilegios por columna lo imponen en la base de datos). Autor, alumno y fecha no cambian.
+   */
+  editarAnotacion(id: string, datos: Pick<Anotacion, 'tipo' | 'descripcion'>, editor: Perfil): void {
+    if (editor.rol !== 'ADMIN') throw new Error('Solo Dirección puede editar anotaciones del anecdotario.');
+    const descripcion = datos.descripcion.trim();
+    if (!descripcion) throw new Error('Escribe el contenido de la anotación.');
+    if (descripcion.length > 2000) throw new Error('La anotación no puede superar los 2000 caracteres.');
+    const actual = this.getAnecdotario().find((a) => a.id === id);
+    if (!actual) throw new Error('La anotación ya no existe.');
+    if (actual.tipo === datos.tipo && actual.descripcion === descripcion) return;
+
+    syncStore.update(STORAGE_KEYS.ANECDOTARIO, id, {
+      tipo: datos.tipo,
+      descripcion,
+      editado_en: new Date().toISOString(),
+      editado_por_nombre: `${editor.nombre} ${editor.apellido}`.trim(),
+    });
+    cacheService.invalidateByTag('anecdotario');
+    notifyDataChange();
+  }
+
   /** Elimina una anotación errónea (solo ADMIN; la RLS lo impone en la base de datos) */
   eliminarAnotacion(id: string): void {
     this.remove(STORAGE_KEYS.ANECDOTARIO, [id]);

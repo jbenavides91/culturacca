@@ -109,7 +109,10 @@ export const TABLES: Record<StorageKey, TableDef> = {
   },
   aa_anecdotario: {
     table: 'anecdotario',
-    columns: ['id', 'estudiante_id', 'grupo_id', 'sesion_id', 'autor_id', 'autor_nombre', 'tipo', 'descripcion', 'creado_en'],
+    columns: [
+      'id', 'estudiante_id', 'grupo_id', 'sesion_id', 'autor_id', 'autor_nombre', 'tipo', 'descripcion', 'creado_en',
+      'editado_en', 'editado_por_nombre',
+    ],
     tags: ['anecdotario'],
     insertOnly: true,
   },
@@ -232,6 +235,32 @@ class SyncStore {
         if (error) throw error;
       }
     }, `guardar en ${table}`);
+  }
+
+  /**
+   * Actualiza solo las columnas indicadas de un registro existente (UPDATE ... WHERE id).
+   * Necesario para tablas `insertOnly`, cuyo upsert ignora los duplicados, y para
+   * tablas con privilegios de UPDATE por columna.
+   */
+  update(key: StorageKey, id: string, patch: Row): void {
+    const map = this.data.get(key)!;
+    const existing = map.get(id);
+    if (!existing) throw new Error('El registro ya no existe.');
+    const columnas = new Set(TABLES[key].columns);
+    const limpio: Row = {};
+    Object.entries(patch).forEach(([k, v]) => {
+      if (k !== 'id' && columnas.has(k)) limpio[k] = v === undefined ? null : v;
+    });
+    if (Object.keys(limpio).length === 0) return;
+    map.set(id, normalizeFromDb({ ...existing, ...limpio }));
+
+    const table = TABLES[key].table;
+    this.enqueue(async () => {
+      const { data, error } = await supabase.from(table).update(limpio).eq('id', id).select('id');
+      if (error) throw error;
+      // La RLS filtra en silencio: 0 filas significa que no había permiso para editar
+      if (!data || data.length === 0) throw new Error('sin permiso para modificar el registro');
+    }, `actualizar en ${table}`);
   }
 
   remove(key: StorageKey, ids: string[]): void {
