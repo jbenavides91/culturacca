@@ -1,0 +1,8 @@
+{
+  "name": "Cultura CCA",
+  "description": "Sistema institucional de control de asistencia para talleres vespertinos de arte y cultura, con alertas tempranas, notificaciones vía Gmail y sincronización con Google Calendar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
