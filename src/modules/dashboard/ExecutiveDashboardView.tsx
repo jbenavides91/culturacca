@@ -160,6 +160,8 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
         <UpcomingClassesCard grupos={grupos} sesiones={sesiones} perfiles={perfiles} />
 
         <AbsenteeismMonitorCard
+          grupos={grupos}
+          perfiles={perfiles}
           sesiones={sesiones}
           asistencias={asistencias}
           onVerEstudiantes={() => onNavigateTab('estudiantes')}

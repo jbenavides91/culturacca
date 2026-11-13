@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, ShieldAlert, Users, X } from 'lucide-react';
 import { storageService } from '../../services/storage.service';
-import { Asistencia, Sesion } from '../../types/attendance';
+import { Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
 import { fechaLocalISO } from '../../utils/fechas';
 import { finDeMes, inicioDeMes, lunesDe, sumarDias } from './attendanceStatus.shared';
 
@@ -20,9 +20,10 @@ interface Filtros {
   periodo: Periodo;
   desde: string;
   hasta: string;
+  grupoId: string; // 'TODOS' o id del taller
 }
 
-const FILTROS_INICIALES: Filtros = { periodo: 'ciclo', desde: '', hasta: '' };
+const FILTROS_INICIALES: Filtros = { periodo: 'ciclo', desde: '', hasta: '', grupoId: 'TODOS' };
 
 const leerFiltros = (): Filtros => {
   try {
@@ -32,6 +33,7 @@ const leerFiltros = (): Filtros => {
       periodo: PERIODOS.some((p) => p.id === f.periodo) ? (f.periodo as Periodo) : 'ciclo',
       desde: typeof f.desde === 'string' ? f.desde : '',
       hasta: typeof f.hasta === 'string' ? f.hasta : '',
+      grupoId: typeof f.grupoId === 'string' ? f.grupoId : 'TODOS',
     };
   } catch {
     return FILTROS_INICIALES;
@@ -44,20 +46,33 @@ const fechaCorta = (iso: string) => {
 };
 
 interface AbsenteeismMonitorCardProps {
+  grupos: Grupo[];
+  perfiles: Perfil[];
   /** Se reciben para recalcular cuando cambian los datos */
   sesiones: Sesion[];
   asistencias: Asistencia[];
   onVerEstudiantes: () => void;
 }
 
-/** Alumnos en riesgo por inasistencia, con filtro de fechas propio */
+/** Alumnos en riesgo por inasistencia, con filtros propios de fechas y taller */
 export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
+  grupos,
+  perfiles,
   sesiones,
   asistencias,
   onVerEstudiantes,
 }) => {
   const [filtros, setFiltros] = useState<Filtros>(leerFiltros);
-  const { periodo, desde, hasta } = filtros;
+  const { periodo, desde, hasta, grupoId } = filtros;
+
+  // Si el taller guardado ya no existe, volver a "Todos"
+  const grupoSel = grupoId === 'TODOS' || grupos.some((g) => g.id === grupoId) ? grupoId : 'TODOS';
+  const gruposOrdenados = useMemo(() => [...grupos].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [grupos]);
+  const nombreDocente = useMemo(() => {
+    const m = new Map(perfiles.map((p) => [p.id, `${p.nombre} ${p.apellido}`.trim()]));
+    return (id: string) => m.get(id);
+  }, [perfiles]);
+  const hayFiltros = periodo !== 'ciclo' || grupoSel !== 'TODOS';
 
   useEffect(() => {
     try {
@@ -90,18 +105,20 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
   const enRiesgo = useMemo(() => {
     if (rangoInvalido) return [];
     return storageService
-      .calcularAlertasEstudiantes(undefined, rango)
+      .calcularAlertasEstudiantes(grupoSel === 'TODOS' ? undefined : grupoSel, rango)
       .filter((a) => a.tiene_alerta)
       .sort((a, b) => b.total_ausencias - a.total_ausencias || a.estudiante_nombre.localeCompare(b.estudiante_nombre));
     // sesiones y asistencias: recalcular cuando cambian los datos
-  }, [rango, rangoInvalido, sesiones, asistencias]);
+  }, [grupoSel, rango, rangoInvalido, sesiones, asistencias]);
 
-  const descripcion =
+  const textoPeriodo =
     periodo === 'ciclo'
       ? 'Todo el ciclo'
       : rango?.desde || rango?.hasta
       ? `${rango?.desde ? fechaCorta(rango.desde) : 'Inicio'} – ${rango?.hasta ? fechaCorta(rango.hasta) : 'hoy'}`
       : 'Todo el ciclo';
+  const descripcion =
+    grupoSel === 'TODOS' ? textoPeriodo : `${textoPeriodo} · ${grupos.find((g) => g.id === grupoSel)?.nombre ?? ''}`;
 
   const inputClass =
     'text-xs rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-[#F7F8FA] dark:bg-[#151A22] text-[#172033] dark:text-[#F1F5F9] px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#4F46E5] w-full';
@@ -143,6 +160,24 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
           ))}
         </div>
 
+        <select
+          value={grupoSel}
+          onChange={(e) => actualizar({ grupoId: e.target.value })}
+          className={inputClass}
+          aria-label="Taller"
+        >
+          <option value="TODOS">Todos los talleres</option>
+          {gruposOrdenados.map((g) => {
+            const docente = nombreDocente(g.profesor_id);
+            return (
+              <option key={g.id} value={g.id}>
+                {g.nombre}
+                {docente ? ` (${docente})` : ''}
+              </option>
+            );
+          })}
+        </select>
+
         {periodo === 'rango' && (
           <div className="grid grid-cols-2 gap-2 text-[11px] text-[#667085] dark:text-[#94A3B8]">
             <label className="space-y-0.5">
@@ -172,7 +207,7 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
           <span className="truncate" title="Solo cuentan las sesiones cerradas del período; los umbrales son los de Configuración.">
             {descripcion} · sesiones cerradas
           </span>
-          {periodo !== 'ciclo' && (
+          {hayFiltros && (
             <button
               type="button"
               onClick={() => setFiltros(FILTROS_INICIALES)}
@@ -195,9 +230,9 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
             <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
             <p className="text-xs font-semibold">Sin alertas de ausentismo</p>
             <p className="text-[11px] text-slate-400 mt-1">
-              {periodo === 'ciclo'
+              {!hayFiltros
                 ? 'Todos los alumnos mantienen asistencia regular.'
-                : 'Ningún alumno supera los umbrales en este período.'}
+                : 'Ningún alumno supera los umbrales con estos filtros.'}
             </p>
           </div>
         ) : (
