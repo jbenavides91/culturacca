@@ -49,7 +49,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
       <header className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 py-3 border-b border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-[#0F141D]/70 backdrop-blur-sm">
         <div className="flex items-center gap-2.5 min-w-0">
           <img
-            src="/pwa-192x192.png"
+            src="/logo-emblema-96.png"
             alt=""
             width={36}
             height={36}
@@ -170,7 +170,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
           </form>
 
           <p className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-center text-[11px] text-slate-400 dark:text-slate-500">
-            ¿Olvidaste tu contraseña? Solicita a la Dirección que la restablezca.
+            ¿Olvidaste tu contraseña? Solicita a la Jefatura de Área que la restablezca.
           </p>
 
 

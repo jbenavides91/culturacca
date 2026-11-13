@@ -189,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="flex items-center gap-2.5 cursor-pointer group"
             >
               <img
-                src="/pwa-192x192.png"
+                src="/logo-emblema-96.png"
                 alt="Colegio Centro América"
                 width={36}
                 height={36}
@@ -206,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <img
-              src="/pwa-192x192.png"
+              src="/logo-emblema-96.png"
               alt="Colegio Centro América"
               title="Cultura CCA"
               width={36}
