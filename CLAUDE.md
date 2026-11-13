@@ -132,7 +132,9 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 - `apple-touch-icon.png` (180 px);
 - `favicon-32x32.png` and `favicon-64x64.png`, linked from `index.html` and listed in `includeAssets`.
 
-They were generated from the full logo SVG, which embeds a 2884×1417 PNG: the emblem was cropped from its left part and resized with PowerShell/.NET `System.Drawing`. ImageMagick and Python are not installed on this machine. To change the icons, regenerate them all at the same sizes and file names. Browsers and installed PWAs cache icons aggressively, so a hard reload or reinstall may be needed to see the change.
+They were generated from the full logo SVG, which embeds a 2884×1417 PNG: the emblem was cropped from its left part and resized with PowerShell/.NET `System.Drawing`. ImageMagick and Python are not installed on this machine. The sidebar brand header (`Sidebar.tsx`, expanded and collapsed) shows the same emblem from `/pwa-192x192.png` as a 36 px white rounded badge, so it stays visible in dark mode.
+
+The login screen (`LoginView.tsx`) uses the same badge in a full-width top bar: the brand on the left edge and the theme toggle on the right, not a centered `max-w` container. The card shows the full horizontal logo `public/logo-cca.png` (720×354, resized from the same SVG). In dark mode the logo sits on a white plate, because its navy text is invisible on the dark card. To change the icons, regenerate them all at the same sizes and file names. Browsers and installed PWAs cache icons aggressively, so a hard reload or reinstall may be needed to see the change.
 
 **Styling**: Tailwind v4 via `@tailwindcss/vite`, configured in `src/index.css` (no tailwind.config). Dark mode is class-based (`@custom-variant dark`) toggled by `context/ThemeContext.tsx`. Components use many hard-coded hex colors (e.g. `#4F46E5` primary, `#1B222D` dark surface) alongside Tailwind palette classes. Icons from `lucide-react`, animation from `motion`.
 

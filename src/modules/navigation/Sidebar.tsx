@@ -8,7 +8,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Layers,
   Receipt,
   FileSignature,
 } from 'lucide-react';
@@ -189,9 +188,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => onTabChange(roleConfig.defaultTab)}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <div className="w-7 h-7 rounded-lg bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-bold transition-opacity group-hover:opacity-90">
-                <Layers className="w-3.5 h-3.5" />
-              </div>
+              <img
+                src="/pwa-192x192.png"
+                alt="Colegio Centro América"
+                width={36}
+                height={36}
+                className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain shrink-0 transition-opacity group-hover:opacity-90"
+              />
               <div className="leading-tight">
                 <span className="font-semibold text-xs tracking-tight text-slate-900 dark:text-white">
                   Cultura CCA
@@ -202,13 +205,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           ) : (
-            <div
-              onClick={() => onTabChange(roleConfig.defaultTab)}
-              className="w-7 h-7 rounded-lg bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-bold cursor-pointer hover:opacity-90"
+            <img
+              src="/pwa-192x192.png"
+              alt="Colegio Centro América"
               title="Cultura CCA"
-            >
-              <Layers className="w-3.5 h-3.5" />
-            </div>
+              width={36}
+              height={36}
+              onClick={() => onTabChange(roleConfig.defaultTab)}
+              className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain cursor-pointer hover:opacity-90"
+            />
           )}
 
           {/* Collapse toggle (desktop only) */}

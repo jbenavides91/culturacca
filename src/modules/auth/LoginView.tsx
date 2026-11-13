@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Layers,
   Lock,
   User,
   Eye,
@@ -45,22 +44,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between p-4 sm:p-6 transition-colors">
-      {/* Top Bar with Brand & Theme Switcher */}
-      <div className="max-w-5xl w-full mx-auto flex items-center justify-between py-2">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-bold">
-            <Layers className="w-3.5 h-3.5" />
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors">
+      {/* Barra superior: marca a la izquierda y tema a la derecha, de borde a borde */}
+      <header className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 py-3 border-b border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-[#0F141D]/70 backdrop-blur-sm">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img
+            src="/pwa-192x192.png"
+            alt=""
+            width={36}
+            height={36}
+            className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain shrink-0"
+          />
+          <div className="leading-tight min-w-0">
+            <span className="block font-semibold text-xs tracking-tight text-slate-900 dark:text-white truncate">
+              Colegio Centro América
+            </span>
+            <span className="block text-[11px] text-slate-400 dark:text-slate-500 truncate">Cultura CCA</span>
           </div>
-          <span className="font-semibold text-xs tracking-tight text-slate-900 dark:text-white">
-            Colegio Centro América
-          </span>
         </div>
 
         <button
           onClick={toggleTheme}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+          className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer shrink-0"
           title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         >
           {theme === 'dark' ? (
             <Sun className="w-4 h-4 text-amber-400" />
@@ -68,15 +75,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
             <Moon className="w-4 h-4 text-slate-600" />
           )}
         </button>
-      </div>
+      </header>
 
       {/* Main Login Card */}
-      <div className="max-w-md w-full mx-auto my-auto py-8">
+      <main className="max-w-md w-full mx-auto my-auto px-4 sm:px-0 py-8">
         <div className="bg-white dark:bg-[#131924] rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-800/80 p-6 sm:p-8 space-y-6">
           {/* Header */}
           <div className="space-y-1 text-center">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-3">
-              <Layers className="w-5 h-5" />
+            {/* Logo completo; en modo oscuro va sobre una placa blanca para que el azul se vea */}
+            <div className="mx-auto mb-4 max-w-[260px] dark:bg-white dark:rounded-xl dark:px-4 dark:py-3">
+              <img
+                src="/logo-cca.png"
+                alt="Colegio Centro América · Nicaragua"
+                width={720}
+                height={354}
+                className="w-full h-auto"
+              />
             </div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               Cultura CCA
@@ -161,12 +175,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
 
 
         </div>
-      </div>
+      </main>
 
       {/* Minimal Footer */}
-      <div className="text-center text-[11px] text-slate-400 dark:text-slate-500 py-2">
-        <span>© 2026 Colegio Centro América · Todos los derechos reservados</span>
-      </div>
+      <footer className="w-full text-center text-[11px] text-slate-400 dark:text-slate-500 px-4 sm:px-6 lg:px-8 py-4">
+        <span>© {new Date().getFullYear()} Colegio Centro América · Todos los derechos reservados</span>
+      </footer>
     </div>
   );
 };
