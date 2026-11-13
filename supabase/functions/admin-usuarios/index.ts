@@ -8,11 +8,26 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// CORS: orígenes permitidos en el secreto ALLOWED_ORIGINS (separados por comas), p. ej.
+// "https://cultura-cca.pages.dev,http://localhost:3000,http://localhost:4173".
+// Si el secreto no está definido se mantiene "*" (la función valida igualmente sesión y rol ADMIN).
+const ORIGENES_PERMITIDOS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+function corsPara(req: Request): Record<string, string> {
+  const base: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+  if (ORIGENES_PERMITIDOS.length === 0) return { ...base, 'Access-Control-Allow-Origin': '*' };
+  const origen = req.headers.get('Origin') ?? '';
+  // Origen no permitido: sin Allow-Origin, el navegador bloquea la respuesta
+  return ORIGENES_PERMITIDOS.includes(origen)
+    ? { ...base, 'Access-Control-Allow-Origin': origen, Vary: 'Origin' }
+    : { ...base, Vary: 'Origin' };
+}
 
 const ROLES = ['ADMIN', 'PROFESOR', 'CAJERO', 'MATRICULA'];
 
@@ -33,7 +48,7 @@ type Json = Record<string, unknown>;
 function json(body: Json, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
@@ -47,8 +62,17 @@ function pickPerfil(input: Json): Json {
   return out;
 }
 
+// Añade las cabeceras CORS del origen de la petición a cualquier respuesta del manejador
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const cors = corsPara(req);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  const respuesta = await manejar(req);
+  const headers = new Headers(respuesta.headers);
+  Object.entries(cors).forEach(([k, v]) => headers.set(k, v));
+  return new Response(respuesta.body, { status: respuesta.status, headers });
+});
+
+async function manejar(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405);
 
   const url = Deno.env.get('SUPABASE_URL')!;
@@ -281,4 +305,4 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Error interno' }, 500);
   }
-});
+}

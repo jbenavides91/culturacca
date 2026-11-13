@@ -162,6 +162,26 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 
 **Offline/PWA**: `vite-plugin-pwa` (auto-update) plus `hooks/useOnlineStatus`, `components/OfflineIndicator`, `hooks/usePWAInstall`. The service worker is **disabled in dev** (`devOptions.enabled: false`), because a dev service worker kept serving stale bundles after frequent changes. There is no offline write queue: saving requires a connection.
 
+**Security headers.** Hosting is Cloudflare Pages, and its headers come from `public/_headers`, which Vite copies to `dist/`. That file is the single source of truth.
+- The `/*` block sets:
+  - a strict CSP (`default-src 'self'`, `script-src 'self' https://apis.google.com`, `object-src 'none'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`);
+  - HSTS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` and `Permissions-Policy`;
+  - `Cross-Origin-Opener-Policy: same-origin-allow-popups`. It must not be `same-origin`, or Firebase's Google sign-in popup breaks.
+- Other rules: `index.html`, `sw.js` and the manifest are `no-cache`, and `/assets/*` is immutable.
+- The CSP allows, by origin:
+  - Supabase: `https://` and `wss://` for the project ref;
+  - Google Fonts;
+  - `*.googleapis.com` for Gmail, Calendar and Firebase token APIs;
+  - the Firebase auth iframe (`<project>.firebaseapp.com`) and `accounts.google.com`;
+  - `*.googleusercontent.com` avatars and `data:`/`blob:` images.
+- `style-src` needs `'unsafe-inline'` because of React `style={}`. Scripts must stay external: the build has no inline scripts and no `eval` or `new Function`. **Any new external service, or a change of Supabase or Firebase project, must be added to the CSP**, or the browser blocks it.
+- `vite.config.ts` parses the `/*` block (`cabecerasDePreview`) into `preview.headers`, so `npm run build && npm run preview` reproduces the production CSP. It drops HSTS and `upgrade-insecure-requests` on http localhost.
+- The dev server (`npm run dev`) sends no CSP, because HMR would break.
+- The `admin-usuarios` Edge Function (version 3) builds its CORS headers per request through `corsPara()`, a wrapper around `manejar()`.
+  - It allows the origins listed in the secret `ALLOWED_ORIGINS` (comma-separated), with `Vary: Origin`.
+  - While that secret is unset it answers `*`, as before.
+  - Once the Pages domain exists, set it with `create_edge_function_secret`, adding `http://localhost:3000` and `http://localhost:4173` for local testing.
+
 **App icons** use the Colegio Centro América emblem (the shark and shield only, without the text, which is unreadable at icon sizes) on a white background. They live in `public/`:
 - `pwa-192x192.png` and `pwa-512x512.png`;
 - `pwa-maskable-512x512.png`, with extra padding for Android's circular crop;
