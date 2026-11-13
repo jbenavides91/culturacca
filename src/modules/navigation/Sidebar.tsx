@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Calendar,
   Palette,
-  GraduationCap,
   Users,
   FileSpreadsheet,
   Settings,
@@ -23,7 +22,6 @@ export type NavTab =
   | 'grupos'
   | 'matriculas'
   | 'caja'
-  | 'maestros'
   | 'estudiantes'
   | 'reportes'
   | 'config';
@@ -103,11 +101,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id: 'estudiantes',
               label: 'Estudiantes',
               icon: <Users className="w-4 h-4 shrink-0" />,
-            },
-            {
-              id: 'maestros',
-              label: 'Docentes',
-              icon: <GraduationCap className="w-4 h-4 shrink-0" />,
             },
           ],
         },

@@ -64,8 +64,6 @@ export const Topbar: React.FC<TopbarProps> = ({
         return 'Matrículas';
       case 'caja':
         return 'Caja y Solvencia';
-      case 'maestros':
-        return 'Docentes';
       case 'estudiantes':
         return 'Estudiantes';
       case 'reportes':

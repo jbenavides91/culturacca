@@ -4,7 +4,6 @@ import { Topbar } from './modules/navigation/Topbar';
 import { ExecutiveDashboardView } from './modules/dashboard/ExecutiveDashboardView';
 import { RollCallView } from './modules/attendance/RollCallView';
 import { WorkshopsView } from './modules/workshops/WorkshopsView';
-import { TeachersView } from './modules/teachers/TeachersView';
 import { StudentsView } from './modules/students/StudentsView';
 import { ReportsView } from './modules/reports/ReportsView';
 import { SettingsView } from './modules/settings/SettingsView';
@@ -35,8 +34,6 @@ export default function App() {
   // Quick Action modal helpers
   const [openNewWorkshopModal, setOpenNewWorkshopModal] = useState(false);
   const [openNewStudentModal, setOpenNewStudentModal] = useState(false);
-  // Desde Docentes: abrir Configuración → Usuarios con el formulario de nuevo docente
-  const [crearDocentePendiente, setCrearDocentePendiente] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToAuth((state) => {
@@ -207,21 +204,6 @@ export default function App() {
                 />
               )}
 
-              {currentTab === 'maestros' && (
-                <TeachersView
-                  currentProfile={activeProfile}
-                  onSelectWorkshop={handleSelectWorkshop}
-                  onCrearDocente={
-                    isTabAllowedForRole(activeProfile.rol, 'config')
-                      ? () => {
-                          setCrearDocentePendiente(true);
-                          setCurrentTab('config');
-                        }
-                      : undefined
-                  }
-                />
-              )}
-
               {currentTab === 'estudiantes' && (
                 <StudentsView
                   currentProfile={activeProfile}
@@ -235,10 +217,7 @@ export default function App() {
               )}
 
               {currentTab === 'config' && (
-                <SettingsView
-                  crearUsuarioConRol={crearDocentePendiente ? 'PROFESOR' : undefined}
-                  onCrearUsuarioAtendido={() => setCrearDocentePendiente(false)}
-                />
+                <SettingsView />
               )}
             </>
           )}

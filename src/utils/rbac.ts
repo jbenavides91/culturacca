@@ -20,7 +20,6 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
       'grupos',
       'matriculas',
       'caja',
-      'maestros',
       'estudiantes',
       'reportes',
       'config',

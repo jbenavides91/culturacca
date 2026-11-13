@@ -19,7 +19,7 @@ import { Grupo, Sesion, Asistencia, Estudiante, Tutor, Perfil } from '../../type
 
 interface ExecutiveDashboardViewProps {
   currentProfile: Perfil;
-  onNavigateTab: (tab: 'asistencia' | 'grupos' | 'maestros' | 'estudiantes' | 'reportes' | 'config') => void;
+  onNavigateTab: (tab: 'asistencia' | 'grupos' | 'estudiantes' | 'reportes' | 'config') => void;
   onSelectWorkshop: (grupoId: string, sesionId?: string) => void;
 }
 
