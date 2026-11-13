@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { AttendanceStatusPanel } from './AttendanceStatusPanel';
+import { UpcomingClassesCard } from './UpcomingClassesCard';
 import { Grupo, Sesion, Asistencia, Estudiante, Tutor, Perfil } from '../../types/attendance';
 
 interface ExecutiveDashboardViewProps {
@@ -287,7 +288,10 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Critical Alert Watchlist */}
+        {/* Right Column: Próximas clases + Critical Alert Watchlist */}
+        <div className="flex flex-col gap-6 min-w-0">
+        <UpcomingClassesCard grupos={grupos} sesiones={sesiones} perfiles={perfiles} />
+
         <div className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex flex-col">
           <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -351,6 +355,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
               Consultar directorio de estudiantes & tutores
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

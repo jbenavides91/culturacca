@@ -15,15 +15,12 @@ import { storageService } from '../../services/storage.service';
 import { Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
 import { fechaLocalISO } from '../../utils/fechas';
 import {
-  BadgeExtra,
   ESTADOS,
   EstadoToma,
   FilaEstatus,
   finDeMes,
-  formatearFecha,
   inicioDeMes,
   lunesDe,
-  ordenarPorFechaHora,
   sumarDias,
   sumarMeses,
 } from './attendanceStatus.shared';
@@ -264,16 +261,6 @@ export const AttendanceStatusPanel: React.FC<AttendanceStatusPanelProps> = ({
   const atrasadas = useMemo(
     () => filas.filter((f) => f.sesion.fecha < hoyStr && (f.estado === 'PENDIENTE' || f.estado === 'PARCIAL')).length,
     [filas, hoyStr]
-  );
-
-  // Próximas clases (para cuando el período elegido no tiene sesiones)
-  const proximas = useMemo(
-    () =>
-      filas
-        .filter((f) => f.sesion.fecha > fin && (docenteId === 'TODOS' || f.grupo.profesor_id === docenteId))
-        .sort(ordenarPorFechaHora)
-        .slice(0, 5),
-    [filas, fin, docenteId]
   );
 
   const hayFiltros = busqueda || docenteId !== 'TODOS' || estado !== 'TODOS';
@@ -529,37 +516,13 @@ export const AttendanceStatusPanel: React.FC<AttendanceStatusPanelProps> = ({
           (filasPeriodo.length > 0 ? (
             <AttendanceWorkshopList filas={filasFiltradas} hoyStr={hoyStr} onPasarLista={onPasarLista} />
           ) : (
-            <div className="py-8 px-4 text-xs text-[#667085] dark:text-[#94A3B8]">
-                      {proximas.length === 0 ? (
-                        <p className="text-center">No hay clases en este período ni próximas clases programadas.</p>
-                      ) : (
-                        <div className="max-w-xl mx-auto space-y-2">
-                          <p className="text-center font-semibold text-[#172033] dark:text-[#F1F5F9]">
-                            No hay clases en este período. Próximas clases:
-                          </p>
-                          <ul className="divide-y divide-[#E7EAF0] dark:divide-[#2B3442] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg">
-                            {proximas.map((f) => (
-                              <li key={f.sesion.id} className="px-3 py-2 flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-[#172033] dark:text-[#F1F5F9] truncate flex items-center gap-1.5">
-                                    {f.grupo.nombre}
-                                    {f.sesion.extraordinaria && <BadgeExtra />}
-                                  </p>
-                                  <p className="text-[11px] truncate">{f.docente}</p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <p className="font-semibold capitalize text-[#172033] dark:text-[#F1F5F9]">
-                                    {formatearFecha(f.sesion.fecha)}
-                                  </p>
-                                  <p className="font-mono text-[11px]">
-                                    {f.sesion.hora_inicio} - {f.sesion.hora_fin}
-                                  </p>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+            <div className="py-10 px-4 text-center">
+              <p className="text-xs font-semibold text-[#172033] dark:text-[#F1F5F9]">
+                {periodo === 'hoy' ? 'No hay clases hoy.' : periodo === 'ayer' ? 'No hay clases ayer.' : 'No hay clases en este período.'}
+              </p>
+              <p className="text-[11px] text-[#667085] dark:text-[#94A3B8] mt-1">
+                Consulta la tarjeta Próximas clases del Panel.
+              </p>
             </div>
           ))}
       </div>
