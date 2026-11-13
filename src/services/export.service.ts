@@ -1,8 +1,19 @@
 import * as XLSX from 'xlsx';
 import { AlertaEstudiante, Asistencia, Estudiante, Grupo, Sesion } from '../types/attendance';
 import { storageService } from './storage.service';
-import { nombreInstitucion } from '../utils/institucion';
+import { cicloActual, nombreInstitucion } from '../utils/institucion';
 import { fechaLocalISO } from '../utils/fechas';
+
+/** Fila ya formateada del historial del anecdotario para exportar */
+export interface FilaAnecdotarioExport {
+  fecha: string;
+  alumno: string;
+  matricula: string;
+  taller: string;
+  tipo: string;
+  descripcion: string;
+  autor: string;
+}
 
 export class ExportService {
   /**
@@ -228,6 +239,29 @@ export class ExportService {
 
     const fileName = `Informe_Consolidado_Talleres_${fechaLocalISO()}.xlsx`;
     XLSX.writeFile(wb, fileName);
+  }
+
+  /**
+   * Exporta el historial del anecdotario tal como está filtrado en pantalla.
+   */
+  exportAnecdotario(filas: FilaAnecdotarioExport[], filtrosDescripcion: string): void {
+    const encabezado = [
+      [nombreInstitucion().toUpperCase()],
+      ['HISTORIAL DEL ANECDOTARIO ESTUDIANTIL'],
+      ['Ciclo Académico:', cicloActual()],
+      ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
+      ['Filtros aplicados:', filtrosDescripcion],
+      ['Total de anotaciones:', filas.length],
+      [''],
+      ['Fecha', 'Alumno', 'Matrícula', 'Taller', 'Tipo', 'Descripción', 'Registrado por'],
+    ];
+    const datos = filas.map((f) => [f.fecha, f.alumno, f.matricula, f.taller, f.tipo, f.descripcion, f.autor]);
+    const ws = XLSX.utils.aoa_to_sheet([...encabezado, ...datos]);
+    ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 70 }, { wch: 24 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Anecdotario');
+    XLSX.writeFile(wb, `Anecdotario_${fechaLocalISO()}.xlsx`);
   }
 
   /**

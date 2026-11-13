@@ -41,7 +41,7 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
     ],
     defaultTab: 'asistencia',
     roleBadgeLabel: 'Docente / Tallerista',
-    roleDescription: 'Acceso exclusivo a Toma de Asistencia, Mis talleres y Reporte de Asistencia.',
+    roleDescription: 'Acceso exclusivo a Toma de Asistencia, Mis talleres y Reportes (asistencia y su anecdotario).',
     canViewExecutiveDashboard: false,
     canManageTeachers: false,
     canManageWorkshops: false,

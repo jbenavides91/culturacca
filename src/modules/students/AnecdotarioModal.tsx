@@ -3,7 +3,7 @@ import { AlertCircle, Award, MessageSquare, NotebookPen, ShieldAlert, Trash2, X 
 import { Anotacion, Estudiante, Grupo, Perfil, TipoAnotacion } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 
-const TIPOS: Record<
+export const TIPOS: Record<
   TipoAnotacion,
   { label: string; icon: React.ReactNode; badge: string; activo: string; inactivo: string }
 > = {
@@ -33,7 +33,7 @@ const TIPOS: Record<
 
 const MAX_CARACTERES = 1000;
 
-const formatearFechaHora = (iso: string) => {
+export const formatearFechaHora = (iso: string) => {
   try {
     return new Date(iso).toLocaleString('es-ES', {
       day: '2-digit',

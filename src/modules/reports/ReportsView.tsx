@@ -10,26 +10,28 @@ import {
   ShieldAlert,
   Receipt,
   CalendarCheck,
+  NotebookPen,
 } from 'lucide-react';
 import { AlertaEstudiante, Grupo, Perfil } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { exportService } from '../../services/export.service';
 import { ReceiptsHistoryTab } from './ReceiptsHistoryTab';
+import { AnecdotarioHistoryTab } from './AnecdotarioHistoryTab';
 import { cicloActual, nombreInstitucion } from '../../utils/institucion';
 
 interface ReportsViewProps {
   currentProfile: Perfil;
 }
 
-type ReportTab = 'asistencia' | 'recibos';
+type ReportTab = 'asistencia' | 'recibos' | 'anecdotario';
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const availableTabs: ReportTab[] =
     currentProfile.rol === 'ADMIN'
-      ? ['asistencia', 'recibos']
+      ? ['asistencia', 'recibos', 'anecdotario']
       : currentProfile.rol === 'CAJERO'
       ? ['recibos']
-      : ['asistencia'];
+      : ['asistencia', 'anecdotario'];
   const [activeTab, setActiveTab] = useState<ReportTab>(availableTabs[0]);
   const reportTab: ReportTab = availableTabs.includes(activeTab) ? activeTab : availableTabs[0];
 
@@ -178,17 +180,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#172033] dark:text-[#F1F5F9] tracking-tight">
             {currentProfile.rol === 'PROFESOR'
-              ? 'Reporte de Asistencia'
+              ? 'Reportes de Asistencia y Anecdotario'
               : currentProfile.rol === 'CAJERO'
               ? 'Reportes de Caja'
               : 'Reportes Consolidados y Matriz de Asistencia'}
           </h1>
           <p className="text-xs text-[#667085] dark:text-[#94A3B8] mt-1">
             {currentProfile.rol === 'PROFESOR'
-              ? 'Seguimiento de ausentismo, porcentaje de asistencia y alertas de tus talleres asignados.'
+              ? 'Seguimiento de ausentismo, alertas de tus talleres asignados e historial de tus anotaciones del anecdotario.'
               : currentProfile.rol === 'CAJERO'
               ? 'Historial de recibos contables y pagos registrados en la ventanilla de Caja.'
-              : 'Análisis de ausentismo estudiantil, alertas tempranas, historial de recibos y exportación de informes institucionales.'}
+              : 'Análisis de ausentismo estudiantil, alertas tempranas, historial de recibos, anecdotario y exportación de informes institucionales.'}
           </p>
         </div>
 
@@ -233,6 +235,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                   <CalendarCheck className="w-4 h-4" />
                   <span>Matriz de Asistencia</span>
                 </>
+              ) : tab === 'anecdotario' ? (
+                <>
+                  <NotebookPen className="w-4 h-4" />
+                  <span>Anecdotario</span>
+                </>
               ) : (
                 <>
                   <Receipt className="w-4 h-4" />
@@ -246,6 +253,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
 
       {reportTab === 'recibos' ? (
         <ReceiptsHistoryTab />
+      ) : reportTab === 'anecdotario' ? (
+        <AnecdotarioHistoryTab currentProfile={currentProfile} />
       ) : (
       <>
       {/* KPI Cards */}
