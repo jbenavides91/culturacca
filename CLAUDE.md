@@ -130,7 +130,15 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
   - A date filter offers any date, a single day, or a range, with Hoy / Esta semana / Este mes shortcuts.
   - Pending requests are filtered by `fecha_solicitud`; collected or formalized ones by `fecha_pago` (falling back to `fecha_aceptacion`). The comparison uses local dates via `fechaLocalISO(new Date(iso))`.
   - Status-button counts come from `solicitudesBase` (search + date), so they match the list. The top metric cards stay global.
-- **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the next one, else the last. Each student row has an Anecdotario column.
+- **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the next one, else the last. Each student row has an Anecdotario column. Below `sm`/`md` the view has its own mobile layout:
+  - The header puts the workshop select (truncated) and an icon-only Excel button on one row.
+  - The session stepper is full width, with 40 px or larger arrows.
+  - The rail with every session node is replaced by the full date plus a thin cycle-progress bar.
+  - Metrics are a single row of 4 counters (P / A / J / %). "Matriculados" is hidden there because the header already shows it.
+  - Filter chips scroll horizontally.
+  - Each student card shows initials, a truncated name and tutor, alert badges, the **Anecdotario button**, compact 40 px P / A / J buttons (`h-10`, reduced from 48 px at the user's request) and a compact Rectificar.
+  - The "Cerrar lista" action lives in a **sticky bottom bar** (`md:hidden`, safe-area padded, only for open, non-future sessions) with live P / A / J counts. The header and footer close buttons are `hidden md:…` on mobile.
+  - The anecdotario type buttons (Comentario / Indisciplina / Logro) follow the same pattern on mobile: a 3-column grid of `h-10` buttons with `text-[11px]`. This applies both in `AnecdotarioModal` (new note) and in the edit form of `AnecdotarioAlumnoModal`; from `sm` up they keep the original wrapping layout.
 - **Configuración** tabs: Usuarios y Roles, Reglas y Parámetros (absence thresholds, institution name, cycle, fee), Salones, Grados, Contrato.
 
 **Offline/PWA**: `vite-plugin-pwa` (auto-update) plus `hooks/useOnlineStatus`, `components/OfflineIndicator`, `hooks/usePWAInstall`. The service worker is **disabled in dev** (`devOptions.enabled: false`), because a dev service worker kept serving stale bundles after frequent changes. There is no offline write queue: saving requires a connection.

@@ -130,15 +130,15 @@ export const AnecdotarioModal: React.FC<AnecdotarioModalProps> = ({
         <div className="overflow-y-auto flex-1 p-3.5 sm:p-5 space-y-5 text-xs">
           {/* Formulario */}
           {puedeEscribir && (
-            <form onSubmit={handleGuardar} className="space-y-3 p-4 rounded-xl bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442]">
-              <div className="flex flex-wrap gap-2">
+            <form onSubmit={handleGuardar} className="space-y-3 p-3 sm:p-4 rounded-xl bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442]">
+              <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
                 {(Object.keys(TIPOS) as TipoAnotacion[]).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTipo(t)}
                     aria-pressed={tipo === t}
-                    className={`min-h-[40px] px-3.5 rounded-lg border font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    className={`h-10 px-1.5 sm:px-3.5 rounded-lg border font-bold text-[11px] sm:text-xs flex items-center justify-center sm:justify-start gap-1 sm:gap-1.5 transition cursor-pointer active:scale-[0.97] min-w-0 ${
                       tipo === t ? TIPOS[t].activo : `bg-white dark:bg-[#1B222D] ${TIPOS[t].inactivo}`
                     }`}
                   >
@@ -163,8 +163,7 @@ export const AnecdotarioModal: React.FC<AnecdotarioModalProps> = ({
                   aria-label="Contenido de la anotación"
                   className="w-full rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D] p-3 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#4F46E5] resize-y"
                 />
-                <div className="flex justify-between text-[10px] text-[#667085] dark:text-[#94A3B8] mt-1">
-                  <span>Solo Dirección puede corregir una anotación ya guardada.</span>
+                <div className="flex justify-end text-[10px] text-[#667085] dark:text-[#94A3B8] mt-1">
                   <span className="tabular-nums">
                     {texto.length}/{MAX_CARACTERES}
                   </span>

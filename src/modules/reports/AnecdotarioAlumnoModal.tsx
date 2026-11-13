@@ -366,14 +366,14 @@ export const AnecdotarioAlumnoModal: React.FC<AnecdotarioAlumnoModalProps> = ({
 
                           {editando ? (
                             <div className="space-y-2.5">
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap">
                                 {TIPOS_LISTA.map((t) => (
                                   <button
                                     key={t}
                                     type="button"
                                     onClick={() => setEditTipo(t)}
                                     aria-pressed={editTipo === t}
-                                    className={`min-h-[36px] px-3 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                                    className={`h-10 sm:h-auto sm:min-h-[36px] px-1.5 sm:px-3 rounded-lg border text-[11px] sm:text-xs font-bold flex items-center justify-center sm:justify-start gap-1 sm:gap-1.5 transition cursor-pointer active:scale-[0.97] min-w-0 ${
                                       editTipo === t ? TIPOS[t].activo : `bg-white dark:bg-[#1B222D] ${TIPOS[t].inactivo}`
                                     }`}
                                   >

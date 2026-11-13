@@ -499,16 +499,16 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       )}
 
       {/* Workshop Executive Header Card */}
-      <div className="bg-white dark:bg-[#141A23] rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800/80 transition-colors space-y-4">
+      <div className="bg-white dark:bg-[#141A23] rounded-2xl p-3.5 sm:p-6 border border-slate-200/80 dark:border-slate-800/80 transition-colors space-y-3 sm:space-y-4">
         {/* Row 1: Workshop Selection & Quick Actions */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-          <div className="space-y-1">
+        <div className="flex flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="space-y-1 min-w-0">
             {/* Clean Single Workshop Selector */}
-            <div className="relative inline-flex items-center">
+            <div className="relative inline-flex items-center max-w-full">
               <select
                 value={selectedGrupoId}
                 onChange={(e) => setSelectedGrupoId(e.target.value)}
-                className="bg-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-900 dark:text-white text-lg sm:text-xl font-bold pr-8 py-1 outline-none cursor-pointer appearance-none transition-colors"
+                className="max-w-full truncate bg-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-xl font-bold pr-7 sm:pr-8 py-1 outline-none cursor-pointer appearance-none transition-colors"
               >
                 {grupos.map((g) => {
                   const isMyWorkshop = currentProfile.rol === 'PROFESOR' && g.profesor_id === currentProfile.id;
@@ -523,38 +523,43 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
             </div>
 
             {/* Context metadata in clean unboxed line */}
-            <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-0.5 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
               <span>{activeGrupo?.aula || 'Aula Principal'}</span>
               <span aria-hidden="true">·</span>
               <span>{activeGrupo?.hora_inicio} - {activeGrupo?.hora_fin} hrs</span>
               <span aria-hidden="true">·</span>
-              <span>{estudiantes.length} alumnos matriculados</span>
+              <span>
+                {estudiantes.length} <span className="hidden sm:inline">alumnos matriculados</span>
+                <span className="sm:hidden">alumnos</span>
+              </span>
             </div>
           </div>
 
           {/* Action buttons (Secondary) */}
-          <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 lg:self-center">
             <button
               onClick={() => activeGrupo && exportService.exportGroupToExcel(activeGrupo.id)}
-              className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#141A23] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200/80 dark:border-slate-800/80 transition-colors flex items-center space-x-1.5 cursor-pointer"
+              className="p-2.5 sm:px-3 sm:py-1.5 rounded-lg bg-white dark:bg-[#141A23] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200/80 dark:border-slate-800/80 transition-colors flex items-center space-x-1.5 cursor-pointer"
               title="Exportar reporte del taller a Excel"
+              aria-label="Exportar reporte del taller a Excel"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Excel (.xlsx)</span>
+              <FileSpreadsheet className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Excel (.xlsx)</span>
             </button>
           </div>
         </div>
 
         {/* Row 2: Active Session Command & Interactive Selector */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Stepper with Previous/Next and Central Interactive Session Dropdown */}
-            <div className="relative inline-flex items-center bg-slate-50 dark:bg-[#151A22] p-1 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs" ref={sessionPickerRef}>
+            <div className="relative flex w-full sm:w-auto sm:inline-flex items-center justify-between bg-slate-50 dark:bg-[#151A22] p-1 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs" ref={sessionPickerRef}>
               <button
                 onClick={handlePrevSession}
                 disabled={currentSesionIndex <= 0}
-                className="p-1.5 rounded-lg text-[#667085] dark:text-[#94A3B8] hover:text-[#172033] dark:hover:text-white hover:bg-white dark:hover:bg-[#1B222D] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                className="p-2.5 sm:p-1.5 rounded-lg text-[#667085] dark:text-[#94A3B8] hover:text-[#172033] dark:hover:text-white hover:bg-white dark:hover:bg-[#1B222D] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
                 title="Clase previa"
+                aria-label="Clase previa"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -562,12 +567,18 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
               {/* Central Interactive Popover Button */}
               <button
                 onClick={() => setSessionPickerOpen(!sessionPickerOpen)}
-                className="px-3 py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#1B222D] text-[#172033] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm flex items-center space-x-2 transition cursor-pointer"
+                className="flex-1 sm:flex-none justify-center min-w-0 px-2 sm:px-3 py-2 sm:py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#1B222D] text-[#172033] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition cursor-pointer"
                 title="Haz clic para seleccionar cualquier fecha o sesión del taller"
               >
-                <CalendarDays className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8]" />
-                <span>Sesión {currentSesionIndex + 1} de {sesiones.length}</span>
-                <span className="text-[#667085] dark:text-[#94A3B8] font-normal">· {activeDateInfo.shortDate}</span>
+                <CalendarDays className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8] shrink-0" />
+                <span className="whitespace-nowrap">
+                  <span className="hidden sm:inline">Sesión </span>
+                  {currentSesionIndex + 1}
+                  <span className="hidden sm:inline"> de </span>
+                  <span className="sm:hidden">/</span>
+                  {sesiones.length}
+                </span>
+                <span className="text-[#667085] dark:text-[#94A3B8] font-normal truncate">· {activeDateInfo.shortDate}</span>
                 {activeSesion?.extraordinaria && (
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
                     Extra
@@ -579,15 +590,16 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
               <button
                 onClick={handleNextSession}
                 disabled={currentSesionIndex >= sesiones.length - 1}
-                className="p-1.5 rounded-lg text-[#667085] dark:text-[#94A3B8] hover:text-[#172033] dark:hover:text-white hover:bg-white dark:hover:bg-[#1B222D] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                className="p-2.5 sm:p-1.5 rounded-lg text-[#667085] dark:text-[#94A3B8] hover:text-[#172033] dark:hover:text-white hover:bg-white dark:hover:bg-[#1B222D] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
                 title="Clase siguiente"
+                aria-label="Clase siguiente"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
 
               {/* Floating Session Picker Popover */}
               {sessionPickerOpen && (
-                <div className="absolute top-full left-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-[#1B222D] shadow-xl border border-[#E7EAF0] dark:border-[#2B3442] p-3 z-40 animate-fadeIn">
+                <div className="absolute top-full left-0 mt-2 w-full sm:w-96 rounded-2xl bg-white dark:bg-[#1B222D] shadow-xl border border-[#E7EAF0] dark:border-[#2B3442] p-3 z-40 animate-fadeIn">
                   <div className="px-3 py-2 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-[#172033] dark:text-[#F1F5F9]">
                       Calendario de Clases ({sesiones.length} Sesiones)
@@ -682,31 +694,38 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                 title="Agregar una clase fuera de los días habituales (reposición o clase extra)"
               >
                 <CalendarPlus className="w-3.5 h-3.5" />
-                <span>Sesión extraordinaria</span>
+                <span className="hidden sm:inline">Sesión extraordinaria</span>
+                <span className="sm:hidden">Clase extra</span>
               </button>
             )}
 
             {/* Status Pill Badge */}
             {activeSesion && estadoSesion(activeSesion).estado === 'PROGRAMADA' ? (
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="inline-flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                 <span>Sesión programada</span>
               </span>
             ) : !activeSesion?.cerrada ? (
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+              <span className="inline-flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Pase de Lista Abierto</span>
+                <span>
+                  <span className="hidden sm:inline">Pase de Lista Abierto</span>
+                  <span className="sm:hidden">Lista abierta</span>
+                </span>
               </span>
             ) : (
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="inline-flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 <Lock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                <span>Lista Concluida (Solo rectificaciones)</span>
+                <span>
+                  <span className="hidden sm:inline">Lista Concluida (Solo rectificaciones)</span>
+                  <span className="sm:hidden">Cerrada · solo rectificar</span>
+                </span>
               </span>
             )}
           </div>
 
-          {/* Primary Action Button (Right) */}
-          <div>
+          {/* Primary Action Button (Right). En móvil va en la barra fija inferior. */}
+          <div className="hidden md:block">
             {sesionFutura ? (
               <div
                 className="px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#667085] dark:text-[#94A3B8] text-xs font-semibold flex items-center space-x-1.5"
@@ -732,8 +751,24 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
           </div>
         </div>
 
+        {/* Row 3 (móvil): fecha y barra de avance compacta en lugar del riel con todas las sesiones */}
+        <div className="sm:hidden space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-[11px] text-[#667085] dark:text-[#94A3B8]">
+            <span className="font-semibold text-[#172033] dark:text-[#F1F5F9] capitalize truncate">{activeDateInfo.fullDate}</span>
+            <span className="tabular-nums shrink-0">
+              {Math.round(((currentSesionIndex + 1) / Math.max(sesiones.length, 1)) * 100)}% del ciclo
+            </span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className="h-1.5 rounded-full bg-[#4F46E5] dark:bg-[#818CF8] transition-all duration-300"
+              style={{ width: `${((currentSesionIndex + 1) / Math.max(sesiones.length, 1)) * 100}%` }}
+            />
+          </div>
+        </div>
+
         {/* Row 3: Modern Linear Academic Progress Rail (Linear / Stripe style) */}
-        <div className="pt-2">
+        <div className="pt-2 hidden sm:block">
           {/* Rail Header with Progress Percentage */}
           <div className="flex items-center justify-between text-xs mb-3">
             <div className="flex items-center space-x-2 text-[#667085] dark:text-[#94A3B8]">
@@ -815,8 +850,9 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       </div>
 
       {/* Session Real-time Metrics Bar (Stripe / Linear style) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center space-x-3">
+      {/* En móvil: una sola fila de 4 contadores (sin "Matriculados", que ya figura en la cabecera) */}
+      <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3.5">
+        <div className="hidden sm:flex bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs items-center space-x-3">
           <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 font-bold shrink-0">
             <Users className="w-4 h-4" />
           </div>
@@ -826,33 +862,25 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#141A23] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3">
-          <div>
-            <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block">Presentes</span>
-            <span className="text-xl font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{sessionMetrics.presentes}</span>
+        {(
+          [
+            { label: 'Presentes', corto: 'Presentes', valor: sessionMetrics.presentes, color: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Ausentes', corto: 'Ausentes', valor: sessionMetrics.ausentes, color: 'text-rose-600 dark:text-rose-400' },
+            { label: 'Justificados', corto: 'Justif.', valor: sessionMetrics.justificados, color: 'text-amber-600 dark:text-amber-400' },
+            { label: 'Asistencia', corto: 'Asist.', valor: `${sessionMetrics.rate}%`, color: 'text-slate-900 dark:text-white' },
+          ] as const
+        ).map((m) => (
+          <div
+            key={m.label}
+            className="bg-white dark:bg-[#141A23] px-2 py-2 sm:p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex flex-col items-center sm:items-start justify-center text-center sm:text-left min-w-0"
+          >
+            <span className={`text-[10px] sm:text-[11px] font-medium block truncate max-w-full ${m.label === 'Asistencia' ? 'text-slate-400' : m.color}`}>
+              <span className="sm:hidden">{m.corto}</span>
+              <span className="hidden sm:inline">{m.label}</span>
+            </span>
+            <span className={`text-lg sm:text-xl font-semibold tabular-nums ${m.color}`}>{m.valor}</span>
           </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#141A23] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3">
-          <div>
-            <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 block">Ausentes</span>
-            <span className="text-xl font-semibold text-rose-600 dark:text-rose-400 tabular-nums">{sessionMetrics.ausentes}</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#141A23] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3">
-          <div>
-            <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 block">Justificados</span>
-            <span className="text-xl font-semibold text-amber-600 dark:text-amber-400 tabular-nums">{sessionMetrics.justificados}</span>
-          </div>
-        </div>
-
-        <div className="col-span-2 sm:col-span-1 bg-white dark:bg-[#141A23] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3">
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block">Asistencia</span>
-            <span className="text-xl font-semibold text-slate-900 dark:text-white tabular-nums">{sessionMetrics.rate}%</span>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Filter and Action Bar */}
@@ -865,15 +893,15 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por estudiante o matrícula..."
-            className="w-full pl-8.5 pr-3 py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full pl-8.5 pr-3 py-2.5 sm:py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
 
         {/* Filter Tabs (Native Segmented Control) */}
-        <div className="inline-flex p-0.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-lg text-xs overflow-x-auto">
+        <div className="flex sm:inline-flex w-full sm:w-auto p-0.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-lg text-xs overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setStatusFilter('TODOS')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+            className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'TODOS'
                 ? 'bg-white dark:bg-[#141A23] text-slate-900 dark:text-white shadow-2xs font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -884,7 +912,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
           <button
             onClick={() => setStatusFilter('PRESENTE')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+            className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'PRESENTE'
                 ? 'bg-white dark:bg-[#141A23] text-emerald-600 dark:text-emerald-400 shadow-2xs font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -895,7 +923,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
           <button
             onClick={() => setStatusFilter('AUSENTE')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+            className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'AUSENTE'
                 ? 'bg-white dark:bg-[#141A23] text-rose-600 dark:text-rose-400 shadow-2xs font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -906,7 +934,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
           <button
             onClick={() => setStatusFilter('JUSTIFICADO')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+            className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'JUSTIFICADO'
                 ? 'bg-white dark:bg-[#141A23] text-amber-600 dark:text-amber-400 shadow-2xs font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -917,7 +945,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
           <button
             onClick={() => setStatusFilter('ALERTAS')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+            className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'ALERTAS'
                 ? 'bg-white dark:bg-[#141A23] text-rose-700 dark:text-rose-300 shadow-2xs font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -931,7 +959,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
         {!activeSesion?.cerrada && !sesionFutura && (
           <button
             onClick={handleMarkAllPresent}
-            className="px-3 py-1.5 bg-white dark:bg-[#141A23] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition border border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-1.5 shrink-0 cursor-pointer"
+            className="px-3 py-2.5 sm:py-1.5 bg-white dark:bg-[#141A23] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-center space-x-1.5 shrink-0 cursor-pointer"
             title="Marcar todos como presentes"
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -1189,77 +1217,101 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
               const alerta = alertas.find((a) => a.estudiante_id === est.id);
 
               return (
-                <div key={est.id} className="p-4 space-y-3 bg-white dark:bg-[#1B222D]">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-bold text-[#172033] dark:text-[#F1F5F9] text-sm">
-                        {est.nombre} {est.apellido}
-                      </span>
-                      <span className="text-xs font-mono text-[#667085] dark:text-[#94A3B8] block">{est.matricula}</span>
-                      <p className="text-[11px] text-[#667085] dark:text-[#94A3B8] mt-0.5">
-                        Tutor: {tutor?.nombre || 'N/A'} • {tutor?.email}
-                      </p>
+                <div key={est.id} className="p-3 space-y-2.5 bg-white dark:bg-[#1B222D]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold flex items-center justify-center text-xs shrink-0">
+                      {est.nombre[0]}
+                      {est.apellido[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-bold text-[#172033] dark:text-[#F1F5F9] text-sm truncate">
+                          {est.nombre} {est.apellido}
+                        </span>
+                        {est.estado === 'BAJA' && (
+                          <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 shrink-0">
+                            Baja
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#667085] dark:text-[#94A3B8] min-w-0">
+                        <span className="font-mono shrink-0">{est.matricula}</span>
+                        {tutor?.nombre && <span className="truncate">· {tutor.nombre}</span>}
+                      </div>
                     </div>
 
                     {alerta?.nivel_alerta === 'CRITICA' && (
-                      <span className="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                        {alerta.total_ausencias} Faltas
+                      <span className="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                        {alerta.total_ausencias} faltas
                       </span>
                     )}
                     {alerta?.nivel_alerta === 'ADVERTENCIA' && (
-                      <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                        Riesgo {alerta.porcentaje_inasistencia}%
+                      <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                        {alerta.porcentaje_inasistencia}%
                       </span>
                     )}
+
+                    {/* Anecdotario (también en móvil) */}
+                    <button
+                      type="button"
+                      onClick={() => setAnecdotarioStudent(est)}
+                      className="relative shrink-0 inline-flex items-center justify-center gap-1 h-11 min-w-11 px-2 rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] text-[#4F46E5] dark:text-[#818CF8] active:bg-indigo-50 dark:active:bg-indigo-950/40 transition cursor-pointer"
+                      aria-label={`Abrir anecdotario de ${est.nombre} ${est.apellido}`}
+                    >
+                      <NotebookPen className="w-4 h-4" />
+                      {(conteoAnotaciones.get(est.id) || 0) > 0 && (
+                        <span className="text-[10px] font-bold font-mono tabular-nums">{conteoAnotaciones.get(est.id)}</span>
+                      )}
+                    </button>
                   </div>
 
-                  {/* 48x48px Touch Targets for Mobile Roll Call */}
+                  {/* Botones P / A / J en móvil: 40 px de alto (compactos pero cómodos al tacto) */}
                   <div
-                    className={`grid grid-cols-3 gap-2 pt-1 ${sesionFutura ? 'opacity-40 pointer-events-none select-none' : ''}`}
+                    className={`grid grid-cols-3 gap-1.5 ${sesionFutura ? 'opacity-40 pointer-events-none select-none' : ''}`}
                     aria-disabled={sesionFutura}
                   >
                     <button
                       disabled={sesionFutura}
                       onClick={() => handleSetStatus(est.id, 'PRESENTE')}
-                      className={`h-12 rounded-lg font-bold text-xs transition flex items-center justify-center space-x-1.5 ${
+                      className={`h-10 rounded-lg font-bold text-[11px] transition flex items-center justify-center gap-1 active:scale-[0.97] ${
                         currentStatus === 'PRESENTE'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                       }`}
                     >
-                      <Check className="w-4 h-4 stroke-[2.5]" />
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       <span>Presente</span>
                     </button>
 
                     <button
                       disabled={sesionFutura}
                       onClick={() => handleSetStatus(est.id, 'AUSENTE')}
-                      className={`h-12 rounded-lg font-bold text-xs transition flex items-center justify-center space-x-1.5 ${
+                      className={`h-10 rounded-lg font-bold text-[11px] transition flex items-center justify-center gap-1 active:scale-[0.97] ${
                         currentStatus === 'AUSENTE'
                           ? 'bg-rose-600 text-white shadow-xs'
                           : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                       }`}
                     >
-                      <X className="w-4 h-4 stroke-[2.5]" />
+                      <X className="w-3.5 h-3.5 stroke-[2.5]" />
                       <span>Ausente</span>
                     </button>
 
                     <button
                       disabled={sesionFutura}
                       onClick={() => handleSetStatus(est.id, 'JUSTIFICADO')}
-                      className={`h-12 rounded-lg font-bold text-xs transition flex items-center justify-center space-x-1.5 ${
+                      className={`h-10 rounded-lg font-bold text-[11px] transition flex items-center justify-center gap-1 active:scale-[0.97] ${
                         currentStatus === 'JUSTIFICADO'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                       }`}
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-3.5 h-3.5" />
                       <span>Justificar</span>
                     </button>
                   </div>
 
                   {asist?.motivo_justificacion && (
-                    <div className="bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg text-xs text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+                    <div className="bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 rounded-lg text-[11px] text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 line-clamp-2">
                       <strong>Motivo:</strong> {asist.motivo_justificacion}
                     </div>
                   )}
@@ -1267,10 +1319,10 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                   {activeSesion?.cerrada && (
                     <button
                       onClick={() => handleOpenRectification(est, asist || null)}
-                      className="w-full mt-1.5 py-2 px-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-[#4F46E5] dark:text-[#818CF8] font-bold text-xs border border-indigo-200 dark:border-indigo-800 flex items-center justify-center space-x-1.5 cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"
+                      className="w-full min-h-11 px-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-[#4F46E5] dark:text-[#818CF8] font-bold text-xs border border-indigo-200 dark:border-indigo-800 flex items-center justify-center space-x-1.5 cursor-pointer active:bg-indigo-100 dark:active:bg-indigo-900/50 transition"
                     >
                       <Pencil className="w-3.5 h-3.5" />
-                      <span>Rectificar Asistencia / Estado</span>
+                      <span>Rectificar asistencia</span>
                     </button>
                   )}
                 </div>
@@ -1280,9 +1332,9 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
         </div>
 
         {/* Footer info strip */}
-        <div className="bg-[#F7F8FA] dark:bg-[#151A22] px-5 py-3.5 border-t border-[#E7EAF0] dark:border-[#2B3442] flex flex-col sm:flex-row items-center justify-between text-xs text-[#667085] dark:text-[#94A3B8] gap-2">
-          <div className="flex items-center space-x-2">
-            <Info className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8]" />
+        <div className="bg-[#F7F8FA] dark:bg-[#151A22] px-3 sm:px-5 py-2.5 sm:py-3.5 border-t border-[#E7EAF0] dark:border-[#2B3442] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] sm:text-xs text-[#667085] dark:text-[#94A3B8] gap-2">
+          <div className="flex items-start sm:items-center gap-2">
+            <Info className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8] shrink-0" />
             {sessionMetrics.ausentes > 0 ? (
               <span className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
                 Hay <strong className="text-rose-600 dark:text-rose-400">{sessionMetrics.ausentes} alumno(s) marcado(s) como ausente(s)</strong>. Al cerrar la lista se enviará aviso oficial a sus tutores legales.
@@ -1297,7 +1349,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
           {!activeSesion?.cerrada && !sesionFutura && (
             <button
               onClick={() => setCloseModalOpen(true)}
-              className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-lg font-bold transition flex items-center space-x-1.5 shadow-xs"
+              className="hidden md:flex px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-lg font-bold transition items-center space-x-1.5 shadow-xs"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Finalizar Sesión</span>
@@ -1305,6 +1357,30 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Barra fija inferior (solo móvil): resumen y cierre de lista siempre a mano */}
+      {activeSesion && !activeSesion.cerrada && !sesionFutura && (
+        <div className="md:hidden sticky bottom-0 z-20 -mx-3 -mb-3 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-[#121722]/95 backdrop-blur-sm border-t border-[#E7EAF0] dark:border-[#2B3442] flex items-center gap-3">
+          <div className="flex items-center gap-2.5 text-xs font-bold tabular-nums">
+            <span className="text-emerald-600 dark:text-emerald-400" title="Presentes">
+              {sessionMetrics.presentes} P
+            </span>
+            <span className="text-rose-600 dark:text-rose-400" title="Ausentes">
+              {sessionMetrics.ausentes} A
+            </span>
+            <span className="text-amber-600 dark:text-amber-400" title="Justificados">
+              {sessionMetrics.justificados} J
+            </span>
+          </div>
+          <button
+            onClick={() => setCloseModalOpen(true)}
+            className="ml-auto min-h-11 px-4 rounded-xl bg-[#4F46E5] active:bg-[#4338CA] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Cerrar lista</span>
+          </button>
+        </div>
+      )}
 
       {/* Modals */}
       {extraModalOpen && activeGrupo && (
