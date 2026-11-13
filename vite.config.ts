@@ -11,7 +11,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'manifest.json'],
+        includeAssets: ['favicon-32x32.png', 'favicon-64x64.png', 'apple-touch-icon.png', 'manifest.json'],
         manifest: {
           id: '/',
           name: 'Cultura CCA',

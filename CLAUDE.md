@@ -126,6 +126,14 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 
 **Offline/PWA**: `vite-plugin-pwa` (auto-update) plus `hooks/useOnlineStatus`, `components/OfflineIndicator`, `hooks/usePWAInstall`. The service worker is **disabled in dev** (`devOptions.enabled: false`), because a dev service worker kept serving stale bundles after frequent changes. There is no offline write queue: saving requires a connection.
 
+**App icons** use the Colegio Centro América emblem (the shark and shield only, without the text, which is unreadable at icon sizes) on a white background. They live in `public/`:
+- `pwa-192x192.png` and `pwa-512x512.png`;
+- `pwa-maskable-512x512.png`, with extra padding for Android's circular crop;
+- `apple-touch-icon.png` (180 px);
+- `favicon-32x32.png` and `favicon-64x64.png`, linked from `index.html` and listed in `includeAssets`.
+
+They were generated from the full logo SVG, which embeds a 2884×1417 PNG: the emblem was cropped from its left part and resized with PowerShell/.NET `System.Drawing`. ImageMagick and Python are not installed on this machine. To change the icons, regenerate them all at the same sizes and file names. Browsers and installed PWAs cache icons aggressively, so a hard reload or reinstall may be needed to see the change.
+
 **Styling**: Tailwind v4 via `@tailwindcss/vite`, configured in `src/index.css` (no tailwind.config). Dark mode is class-based (`@custom-variant dark`) toggled by `context/ThemeContext.tsx`. Components use many hard-coded hex colors (e.g. `#4F46E5` primary, `#1B222D` dark surface) alongside Tailwind palette classes. Icons from `lucide-react`, animation from `motion`.
 
 ## Troubleshooting (issues already diagnosed)
