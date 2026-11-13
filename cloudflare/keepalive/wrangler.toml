@@ -1,0 +1,14 @@
+# Worker keep-alive de Supabase (ver worker.js y README.md).
+# Los secretos SUPABASE_URL y SUPABASE_ANON_KEY se configuran con
+# `npx wrangler@4 secret put ...` o en el dashboard, nunca aquí.
+name = "cca-supabase-keepalive"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+[triggers]
+# Lunes y jueves, 15:00 UTC (9:00 en Nicaragua).
+crons = ["0 15 * * 1,4"]
+
+[observability]
+enabled = true
