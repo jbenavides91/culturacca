@@ -135,7 +135,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
                 Módulo de Matrícula de Alumnos
               </h1>
               <p className="text-xs text-[#667085] dark:text-[#94A3B8]">
-                Registro de datos de alumnos (1er a 11mo grado), selección de talleres extracurriculares y contratos digitales firmados.
+                Registro de datos de alumnos, selección de talleres extracurriculares y contratos digitales firmados.
               </p>
             </div>
           </div>
@@ -326,7 +326,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
             <thead className="bg-[#F7F8FA] dark:bg-[#151A22] text-[#667085] dark:text-[#94A3B8] uppercase text-[10px] font-bold tracking-wider border-b border-[#E7EAF0] dark:border-[#2B3442]">
               <tr>
                 <th className="py-3 px-4">Trámite & Alumno</th>
-                <th className="py-3 px-4">Grado (1er a 11mo) & Aula</th>
+                <th className="py-3 px-4">Grado & Aula</th>
                 <th className="py-3 px-4">Taller Extracurricular</th>
                 <th className="py-3 px-4">Tutor Legal & Contacto</th>
                 <th className="py-3 px-4">Contrato & Firma</th>

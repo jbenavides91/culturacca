@@ -34,8 +34,9 @@ import {
 } from '../../utils/correoInterno';
 import { ContractTemplateTab } from './ContractTemplateTab';
 import { SalonesTab } from './SalonesTab';
+import { GradosTab } from './GradosTab';
 
-type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'contrato';
+type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'contrato';
 
 interface SettingsViewProps {
   /** Abre directamente el formulario de nuevo usuario con este rol (p. ej. desde Docentes) */
@@ -352,7 +353,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
             Configuración del Sistema
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Administración de cuentas de usuario, roles, reglas institucionales, salones y contrato de matrícula.
+            Administración de cuentas de usuario, roles, reglas institucionales, salones, grados y contrato de matrícula.
           </p>
         </div>
 
@@ -393,6 +394,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
           >
             <DoorOpen className="w-3.5 h-3.5" />
             <span>Salones</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('grados')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'grados'
+                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Grados</span>
           </button>
           <button
             type="button"
@@ -809,6 +822,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* TAB: CATÁLOGO DE SALONES */}
       {activeTab === 'salones' && <SalonesTab />}
+
+      {/* TAB: GRADOS ESCOLARES */}
+      {activeTab === 'grados' && <GradosTab />}
 
       {/* TAB 3: PLANTILLA DE CONTRATO */}
       {activeTab === 'contrato' && <ContractTemplateTab />}

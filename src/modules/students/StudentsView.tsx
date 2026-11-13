@@ -22,13 +22,13 @@ import {
 } from 'lucide-react';
 import { AnecdotarioModal } from './AnecdotarioModal';
 import { arancelDeGrupo } from '../../utils/arancel';
+import { gradosDisponibles } from '../../utils/grados';
 import {
   Estudiante,
   Grupo,
   Perfil,
   Tutor,
   SolicitudMatricula,
-  GRADOS_ESCOLARES,
   EstadoEstudiante,
   EstadoPagoAnual,
 } from '../../types/attendance';
@@ -69,7 +69,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [editNombre, setEditNombre] = useState('');
   const [editApellido, setEditApellido] = useState('');
   const [editMatricula, setEditMatricula] = useState('');
-  const [editGrado, setEditGrado] = useState<string>('5to Grado');
+  const [editGrado, setEditGrado] = useState<string>(() => gradosDisponibles()[0] ?? '');
   const [editAulaRegular, setEditAulaRegular] = useState('Aula 5-A');
   const [editTutorNombre, setEditTutorNombre] = useState('');
   const [editEstado, setEditEstado] = useState<EstadoEstudiante>('ACTIVO');
@@ -95,7 +95,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   // Campos actualizables del alumno y tutor en la renovación
   const [renovacionNombre, setRenovacionNombre] = useState('');
   const [renovacionApellido, setRenovacionApellido] = useState('');
-  const [renovacionGrado, setRenovacionGrado] = useState<string>('5to Grado');
+  const [renovacionGrado, setRenovacionGrado] = useState<string>(() => gradosDisponibles()[0] ?? '');
   const [renovacionAulaRegular, setRenovacionAulaRegular] = useState('Aula 5-A');
   const [renovacionEdad, setRenovacionEdad] = useState<number | string>(11);
   const [renovacionTutorNombre, setRenovacionTutorNombre] = useState('');
@@ -126,7 +126,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
     setEditNombre(est.nombre);
     setEditApellido(est.apellido);
     setEditMatricula(est.matricula);
-    setEditGrado(est.grado || '5to Grado');
+    setEditGrado(est.grado || gradosDisponibles()[0] || '');
     setEditAulaRegular(est.aula_regular || 'Aula Regular');
     setEditEstado(est.estado || 'ACTIVO');
     setEditContratoVigente(est.contrato_vigente ?? true);
@@ -237,7 +237,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
     // Inicializar datos del estudiante editables para el nuevo ciclo
     setRenovacionNombre(est.nombre || '');
     setRenovacionApellido(est.apellido || '');
-    setRenovacionGrado(est.grado || '5to Grado');
+    setRenovacionGrado(est.grado || gradosDisponibles()[0] || '');
     setRenovacionAulaRegular(est.aula_regular || 'Aula Regular');
     setRenovacionEdad(est.edad ?? 11);
 
@@ -274,7 +274,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       codigoAlumno: studentToRenovar.matricula,
       nombreAlumno: cleanNombre,
       edad: Number(renovacionEdad) || studentToRenovar.edad || 11,
-      grado: renovacionGrado || studentToRenovar.grado || '5to Grado',
+      grado: renovacionGrado || studentToRenovar.grado || gradosDisponibles()[0] || '',
       aulaRegular: renovacionAulaRegular.trim() || studentToRenovar.aula_regular || 'Aula Regular',
       nombreTutor: cleanTutor,
       cedulaTutor: renovacionTutorParentesco || 'Tutor Legal',
@@ -972,7 +972,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                         onChange={(e) => setRenovacionGrado(e.target.value)}
                         className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs cursor-pointer"
                       >
-                        {GRADOS_ESCOLARES.map((g) => (
+                        {gradosDisponibles(renovacionGrado).map((g) => (
                           <option key={g} value={g}>
                             {g}
                           </option>
@@ -1273,7 +1273,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     onChange={(e) => setEditGrado(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                   >
-                    {GRADOS_ESCOLARES.map((g) => (
+                    {gradosDisponibles(editGrado).map((g) => (
                       <option key={g} value={g}>
                         {g}
                       </option>

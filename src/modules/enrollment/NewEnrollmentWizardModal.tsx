@@ -17,7 +17,8 @@ import {
   Palette,
   Users,
 } from 'lucide-react';
-import { Grupo, SolicitudMatricula, GRADOS_ESCOLARES } from '../../types/attendance';
+import { Grupo, SolicitudMatricula } from '../../types/attendance';
+import { gradosDisponibles } from '../../utils/grados';
 import { storageService } from '../../services/storage.service';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
 import { arancelDeGrupo, etiquetaPeriodo, formatearMonto, montoDeSolicitud } from '../../utils/arancel';
@@ -43,7 +44,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   const [nombreAlumno, setNombreAlumno] = useState('');
   const [apellidoAlumno, setApellidoAlumno] = useState('');
   const [edad, setEdad] = useState<number>(10);
-  const [grado, setGrado] = useState('5to Grado');
+  const [grado, setGrado] = useState(() => gradosDisponibles()[0] ?? '');
   const [aulaRegular, setAulaRegular] = useState('Aula 5-A');
 
   const [tutorNombre, setTutorNombre] = useState('');
@@ -427,7 +428,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                       onChange={(e) => setGrado(e.target.value)}
                       className="w-full px-3 py-2 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs focus:ring-2 focus:ring-[#4F46E5] outline-none"
                     >
-                      {GRADOS_ESCOLARES.map((g) => (
+                      {gradosDisponibles(grado).map((g) => (
                         <option key={g} value={g}>
                           {g}
                         </option>

@@ -23,7 +23,8 @@ export type StorageKey =
   | 'aa_configuracion'
   | 'aa_matriculas'
   | 'aa_anecdotario'
-  | 'aa_salones';
+  | 'aa_salones'
+  | 'aa_grados';
 
 interface TableDef {
   table: string;
@@ -120,6 +121,12 @@ export const TABLES: Record<StorageKey, TableDef> = {
     table: 'salones',
     columns: ['id', 'nombre', 'ubicacion', 'capacidad', 'activo', 'creado_en'],
     tags: ['salones'],
+  },
+  aa_grados: {
+    table: 'grados',
+    columns: ['id', 'nombre', 'orden', 'activo', 'creado_en'],
+    tags: ['grados'],
+    defaults: { orden: 0, activo: true },
   },
 };
 

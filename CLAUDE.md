@@ -28,12 +28,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-**Backend is Supabase** (Postgres + Auth + Realtime + one Edge Function), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
+**Backend is Supabase** (Postgres + Auth + Realtime + one Edge Function), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`; `0010_grados.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
 
 **Navigation is state-based, not routed.** `src/App.tsx` holds `currentTab: NavTab` (type defined in `modules/navigation/Sidebar.tsx`) and conditionally renders one view per tab. Cross-module navigation is done via callbacks passed down from `App` (e.g. `onSelectWorkshop` sets the selected group and switches to the `asistencia` tab). When adding a tab: update `NavTab`, `Sidebar`, `ROLE_CONFIGS` in `utils/rbac.ts`, and the render switch in `App.tsx`.
 
 **RBAC** (`src/utils/rbac.ts`): roles `ADMIN`, `PROFESOR`, `CAJERO`, `MATRICULA`, each with an allowed-tab list and a default tab. `App` blocks disallowed tabs; views also receive `currentProfile` and filter data by role (e.g. professors see only their own groups). The UI rules must stay consistent with the RLS write policies in the SQL migrations. Reads are open to any active profile, except `anecdotario` (see below). Writes:
-- ADMIN: everything; only ADMIN writes `grupos`, `perfiles`, `configuracion` and `salones`.
+- ADMIN: everything; only ADMIN writes `grupos`, `perfiles`, `configuracion`, `salones` and `grados`.
 - PROFESOR: `asistencias`, `sesiones`, `log_notificaciones`, and inserting its own `anecdotario` notes.
 - CAJERO and MATRICULA: `matriculas`, `estudiantes`, `tutores`, `inscripciones`.
 
@@ -78,6 +78,15 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 
 **Salones** (table `salones`, ADMIN writes, managed in Configuración → Salones / `SalonesTab.tsx`): `grupos.aula` stores the room **name**, not an id. `actualizarSalon` propagates a rename to the groups that use it, and `eliminarSalon` refuses while a room is in use (deactivate it instead). Workshops pick rooms through `SalonSelect` (active rooms only, falling back to free text if the catalogue is empty). `crearGrupoConSesiones`/`actualizarGrupo` call `verificarChoqueSalon`, which blocks two workshops in the same catalogued room with overlapping cycle dates, days and hours (it reuses `sonTalleresEnConflicto`). Non-catalogued values such as "Taller Principal" are not checked.
 
+**Grados** (table `grados` with `nombre`, `orden`, `activo`; ADMIN writes; managed in Configuración → Grados / `GradosTab.tsx`) are never hard-coded. `estudiantes.grado` and `matriculas.grado` store the grade **name**, not an id.
+- To list grades, use `gradosDisponibles(actual?)` from `src/utils/grados.ts`: active grades in `orden`. Pass the current value when editing so an inactive or legacy grade is not lost. Use `indiceGrado()` to sort by grade.
+- `GRADOS_ESCOLARES` (1er–11mo) is only the fallback used when the catalogue is empty.
+- `actualizarGrado` propagates a rename to students and enrollments.
+- `moverGrado` renumbers `orden`.
+- `eliminarGrado` refuses while a grade is in use (deactivate it instead).
+- The table was seeded with the 11 former grades (`grd-01`…`grd-11`).
+- Its policies passed a rolled-back 12-case RLS test. ADMIN can insert, update and delete, and duplicate names are rejected case-insensitively. PROFESOR and CAJERO can read but get "denied" on insert and update or delete 0 rows. anon reads 0 rows.
+
 **Notable views**:
 - **Panel** (`modules/dashboard/`): `AttendanceStatusPanel` derives a per-session status (Cerrada / Tomada / Parcial / Pendiente / Programada / Sin alumnos), using **local** dates (not UTC) and counting only active enrolled students. Every "Pasar lista" action calls `onSelectWorkshop(grupoId, sesionId)`, which opens `RollCallView` on that exact session via `initialSesionId`. The panel computes the status and the filters (docente, estado, búsqueda), then renders one of three views. They are built for 20+ workshops, and the chosen view is remembered in `localStorage` under `cca_panel_vista_asistencia`. The KPI cards always reflect the visible range.
   - **Talleres** (`AttendanceWorkshopList`, internal id `'lista'`) uses the period selector (Hoy / Ayer / Semana / Mes / Ciclo / Rango) and shows one row per workshop, not per session. Each row has a compliance bar, ✓ ◐ ✕ ○ counters and a button for the oldest pending or partial session (or "Cerrar sesión" for a taken but unclosed one). Rows are sorted most-overdue first and expand to show their sessions. When the period has no sessions, it shows only a short notice that points to the Próximas clases card.
@@ -85,6 +94,16 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
   - **Mes** (`AttendanceMonthCalendar`) is a month calendar with per-day status counters. Clicking a day lists its sessions with `FilaSesion`.
   - Semana and Mes navigate with ◀ ▶ and ignore the period selector.
   - **Próximas clases** (`UpcomingClassesCard`) is a separate card, not part of the status panel. It sits in the Panel's right column above Monitoreo de Ausentismo and is always visible, independent of the status filters. It lists sessions that are not closed and have not started yet (later today or future dates) as a day-grouped agenda ("Hoy" / "Mañana" / date, start and end time, Extra badge, workshop, teacher, room). It has its own date filter: **Próximos 7 días** (default; the next 7 days, or at least the first day with classes, and "Ver más clases" extends it 7 days at a time), **Este mes** (today to month end), and **Rango** (Desde/Hasta, both optional, `min` = today, with "Limpiar fechas" and a warning when Hasta < Desde). Past or already-started classes are never listed, whatever the range.
+  - **Indicadores** (`DashboardKpis`) are the 4 KPI cards at the top of the Panel. They have their own filters, independent of the rest of the Panel and remembered in `localStorage` under `cca_panel_kpi_filtros`:
+    - Período: Hoy / Esta semana / Este mes / Todo el ciclo (default) / Rango.
+    - Taller: all workshops or one.
+  - The cards are computed from the sessions in the range and the selected workshop:
+    - Tasa de Asistencia: records of those sessions.
+    - Sesiones Concluidas: closed sessions out of those sessions.
+    - Talleres & Comunidad: workshops with classes in the period, plus their distinct active enrolled students and tutors.
+  - With no filters, Talleres & Comunidad keeps the global totals.
+  - **Alertas de Inasistencia** respond only to the workshop filter, because alerts are cumulative over the cycle (`calcularAlertasEstudiantes(grupoId)`).
+  - Monitoreo de Ausentismo always uses the unfiltered alerts.
   - Shared pieces live in `attendanceStatus.shared.tsx`. Those are `ESTADOS`, `FilaEstatus`, `FilaSesion`, `BadgeExtra`, and the UTC date helpers on `YYYY-MM-DD` strings (`sumarDias`, `lunesDe`, `inicioDeMes`, `finDeMes`, `sumarMeses`). Use them instead of `new Date('YYYY-MM-DD')`.
 - **Reportes** has three tabs:
   - **Matriz de Asistencia**: ADMIN and PROFESOR.
@@ -99,7 +118,7 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
   - Pending requests are filtered by `fecha_solicitud`; collected or formalized ones by `fecha_pago` (falling back to `fecha_aceptacion`). The comparison uses local dates via `fechaLocalISO(new Date(iso))`.
   - Status-button counts come from `solicitudesBase` (search + date), so they match the list. The top metric cards stay global.
 - **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the next one, else the last. Each student row has an Anecdotario column.
-- **Configuración** tabs: Usuarios y Roles, Reglas y Parámetros (absence thresholds, institution name, cycle, fee), Salones, Contrato.
+- **Configuración** tabs: Usuarios y Roles, Reglas y Parámetros (absence thresholds, institution name, cycle, fee), Salones, Grados, Contrato.
 
 **Offline/PWA**: `vite-plugin-pwa` (auto-update) plus `hooks/useOnlineStatus`, `components/OfflineIndicator`, `hooks/usePWAInstall`. The service worker is **disabled in dev** (`devOptions.enabled: false`), because a dev service worker kept serving stale bundles after frequent changes. There is no offline write queue: saving requires a connection.
 

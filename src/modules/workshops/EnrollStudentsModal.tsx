@@ -10,7 +10,8 @@ import {
   ChevronDown,
   RotateCcw,
 } from 'lucide-react';
-import { Estudiante, Grupo, Tutor, GRADOS_ESCOLARES } from '../../types/attendance';
+import { Estudiante, Grupo, Tutor } from '../../types/attendance';
+import { indiceGrado } from '../../utils/grados';
 import { storageService } from '../../services/storage.service';
 
 interface EnrollStudentsModalProps {
@@ -111,8 +112,8 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
     });
 
     return Array.from(map.entries()).sort((a, b) => {
-      const idxA = GRADOS_ESCOLARES.indexOf(a[0] as any);
-      const idxB = GRADOS_ESCOLARES.indexOf(b[0] as any);
+      const idxA = indiceGrado(a[0]);
+      const idxB = indiceGrado(b[0]);
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
       if (idxA !== -1) return -1;
       if (idxB !== -1) return 1;

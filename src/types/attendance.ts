@@ -196,6 +196,19 @@ export interface AlertaEstudiante {
 
 export type EstadoMatricula = 'PENDIENTE_CAJA' | 'SOLVENTE' | 'ACEPTADA' | 'RECHAZADA';
 
+/** Grado escolar del catálogo (Configuración → Grados). Alumnos y matrículas guardan su NOMBRE. */
+export interface Grado {
+  id: string;
+  nombre: string;
+  orden: number;
+  activo: boolean;
+  creado_en: string;
+}
+
+/**
+ * Grados por defecto: solo se usan si el catálogo `grados` está vacío.
+ * Para listar grados usar siempre `gradosDisponibles()` (src/utils/grados.ts).
+ */
 export const GRADOS_ESCOLARES = [
   '1er Grado',
   '2do Grado',
@@ -224,7 +237,7 @@ export interface SolicitudMatricula {
   nombre_alumno: string;
   apellido_alumno: string;
   edad: number;
-  grado: string; // 1er Grado a 11mo Grado
+  grado: string; // Nombre de un grado del catálogo (Configuración → Grados)
   aula_regular: string; // Ej: "Aula 5-B", "Pabellón A"
 
   // Datos del tutor o padre de familia

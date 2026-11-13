@@ -770,7 +770,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
                     htmlFor="caja-chk-datos"
                     className="text-xs font-semibold text-[#172033] dark:text-[#F1F5F9] cursor-pointer"
                   >
-                    He verificado que los datos personales y el grado (1er a 11mo) del alumno están conformes.
+                    He verificado que los datos personales y el grado del alumno están conformes.
                   </label>
                 </div>
               </div>

@@ -8,6 +8,7 @@ import {
   EstadoPagoAnual,
   Estudiante,
   EstatusAsistencia,
+  Grado,
   Grupo,
   Inscripcion,
   LogNotificacion,
@@ -36,6 +37,7 @@ const STORAGE_KEYS = {
   MATRICULAS: 'aa_matriculas',
   ANECDOTARIO: 'aa_anecdotario',
   SALONES: 'aa_salones',
+  GRADOS: 'aa_grados',
 } as const satisfies Record<string, StorageKey>;
 
 // Listeners for data updates
@@ -1422,6 +1424,116 @@ class StorageService {
     notifyDataChange();
   }
 
+  // --- GRADOS (catálogo; estudiantes.grado y matriculas.grado guardan el nombre) ---
+
+  getGrados(): Grado[] {
+    const cached = cacheService.get<Grado[]>('grados_all');
+    if (cached) return cached;
+    const data = this.read<Grado[]>(STORAGE_KEYS.GRADOS, [])
+      .map((g) => ({ ...g, activo: g.activo !== false, orden: Number(g.orden) || 0 }))
+      .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es'));
+    cacheService.set('grados_all', data, 60000, ['grados']);
+    return data;
+  }
+
+  /** Cuántos alumnos y matrículas usan un grado (por nombre, sin distinguir mayúsculas) */
+  contarUsoGrado(nombre: string): { estudiantes: number; matriculas: number } {
+    const clave = nombre.trim().toLowerCase();
+    const igual = (g?: string) => (g || '').trim().toLowerCase() === clave;
+    return {
+      estudiantes: this.read<Estudiante[]>(STORAGE_KEYS.ESTUDIANTES, []).filter((e) => igual(e.grado)).length,
+      matriculas: this.read<SolicitudMatricula[]>(STORAGE_KEYS.MATRICULAS, []).filter((m) => igual(m.grado)).length,
+    };
+  }
+
+  private validarNombreGrado(nombre: string, excluirId?: string): string {
+    const limpio = nombre.trim();
+    if (!limpio) throw new Error('El nombre del grado es obligatorio.');
+    if (limpio.length > 60) throw new Error('El nombre del grado no puede superar los 60 caracteres.');
+    const duplicado = this.getGrados().some(
+      (g) => g.id !== excluirId && g.nombre.trim().toLowerCase() === limpio.toLowerCase()
+    );
+    if (duplicado) throw new Error(`Ya existe un grado llamado "${limpio}".`);
+    return limpio;
+  }
+
+  /** Crea un grado al final de la lista */
+  crearGrado(nombre: string): Grado {
+    const grados = this.getGrados();
+    const nuevo: Grado = {
+      id: `grd-${nuevoId()}`,
+      nombre: this.validarNombreGrado(nombre),
+      orden: grados.reduce((max, g) => Math.max(max, g.orden), 0) + 1,
+      activo: true,
+      creado_en: new Date().toISOString(),
+    };
+    this.write(STORAGE_KEYS.GRADOS, [nuevo]);
+    cacheService.invalidateByTag('grados');
+    notifyDataChange();
+    return nuevo;
+  }
+
+  /** Actualiza un grado; si cambia el nombre, lo propaga a los alumnos y matrículas que lo usan */
+  actualizarGrado(id: string, datos: Partial<Pick<Grado, 'nombre' | 'activo'>>): Grado {
+    const actual = this.getGrados().find((g) => g.id === id);
+    if (!actual) throw new Error('Grado no encontrado.');
+    const nombre = datos.nombre !== undefined ? this.validarNombreGrado(datos.nombre, id) : actual.nombre;
+    const actualizado: Grado = { ...actual, ...datos, nombre, id };
+    this.write(STORAGE_KEYS.GRADOS, [actualizado]);
+
+    if (nombre !== actual.nombre) {
+      const clave = actual.nombre.trim().toLowerCase();
+      const igual = (g?: string) => (g || '').trim().toLowerCase() === clave;
+      const alumnos = this.read<Estudiante[]>(STORAGE_KEYS.ESTUDIANTES, [])
+        .filter((e) => igual(e.grado))
+        .map((e) => ({ ...e, grado: nombre }));
+      if (alumnos.length > 0) this.write(STORAGE_KEYS.ESTUDIANTES, alumnos);
+      const solicitudes = this.read<SolicitudMatricula[]>(STORAGE_KEYS.MATRICULAS, [])
+        .filter((m) => igual(m.grado))
+        .map((m) => ({ ...m, grado: nombre }));
+      if (solicitudes.length > 0) this.write(STORAGE_KEYS.MATRICULAS, solicitudes);
+      cacheService.invalidateByTag('estudiantes');
+      cacheService.invalidateByTag('matriculas');
+    }
+
+    cacheService.invalidateByTag('grados');
+    notifyDataChange();
+    return actualizado;
+  }
+
+  /** Sube (-1) o baja (+1) un grado en la lista, intercambiando su orden con el vecino */
+  moverGrado(id: string, direccion: -1 | 1): void {
+    const grados = this.getGrados();
+    const i = grados.findIndex((g) => g.id === id);
+    const j = i + direccion;
+    if (i < 0 || j < 0 || j >= grados.length) return;
+    // Renumerar toda la lista evita empates de orden heredados de la semilla
+    const reordenados = [...grados];
+    [reordenados[i], reordenados[j]] = [reordenados[j], reordenados[i]];
+    const cambios = reordenados
+      .map((g, idx) => ({ ...g, orden: idx + 1 }))
+      .filter((g) => g.orden !== grados.find((x) => x.id === g.id)!.orden);
+    if (cambios.length === 0) return;
+    this.write(STORAGE_KEYS.GRADOS, cambios);
+    cacheService.invalidateByTag('grados');
+    notifyDataChange();
+  }
+
+  /** Elimina un grado que ningún alumno ni matrícula use */
+  eliminarGrado(id: string): void {
+    const grado = this.getGrados().find((g) => g.id === id);
+    if (!grado) return;
+    const uso = this.contarUsoGrado(grado.nombre);
+    if (uso.estudiantes + uso.matriculas > 0) {
+      throw new Error(
+        `No se puede eliminar "${grado.nombre}" porque lo usan ${uso.estudiantes} alumno(s) y ${uso.matriculas} matrícula(s). Puedes desactivarlo en su lugar.`
+      );
+    }
+    this.remove(STORAGE_KEYS.GRADOS, [id]);
+    cacheService.invalidateByTag('grados');
+    notifyDataChange();
+  }
+
   /**
    * Impide asignar un salón ocupado por otro taller en días/horario/ciclo coincidentes.
    * Reutiliza la detección de choques de horario entre talleres.
@@ -1551,7 +1663,7 @@ class StorageService {
       ...s,
       grado: s.grado
         ? s.grado.replace(/ Primaria| Secundaria/gi, '').replace(' Año', ' Grado')
-        : '1er Grado',
+        : this.getGrados().find((g) => g.activo)?.nombre ?? '',
     }));
     return normalized.sort((a, b) => b.fecha_solicitud.localeCompare(a.fecha_solicitud));
   }
