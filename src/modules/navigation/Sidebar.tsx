@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Calendar,
@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Receipt,
   FileSignature,
+  X,
 } from 'lucide-react';
 import { Perfil } from '../../types/attendance';
 import { ROLE_CONFIGS } from '../../utils/rbac';
@@ -178,111 +179,191 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
       ];
 
-  const sidebarContent = (
-    <div className="flex flex-col h-full bg-white dark:bg-[#121722] text-slate-900 dark:text-slate-100 border-r border-slate-200/80 dark:border-slate-800/80 select-none transition-all duration-150">
-      {/* Brand Header */}
-      <div className={`p-4 border-b border-slate-100 dark:border-slate-800/60 flex flex-col ${isCollapsed ? 'items-center' : 'items-stretch'}`}>
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-          {!isCollapsed ? (
-            <div
-              onClick={() => onTabChange(roleConfig.defaultTab)}
-              className="flex items-center gap-2.5 cursor-pointer group"
-            >
+  // --- Panel móvil: Escape, bloqueo de scroll, foco y cierre al pasar a escritorio ---
+  const cerrarRef = useRef<HTMLButtonElement>(null);
+  const toqueInicio = useRef<{ x: number; y: number } | null>(null);
+  // App pasa una función nueva en cada render: se guarda en una ref para no reiniciar el efecto
+  const cerrarMovilRef = useRef(onCloseMobile);
+  cerrarMovilRef.current = onCloseMobile;
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const focoPrevio = document.activeElement as HTMLElement | null;
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const t = window.setTimeout(() => cerrarRef.current?.focus(), 50);
+
+    const alPresionar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cerrarMovilRef.current();
+    };
+    const escritorio = window.matchMedia('(min-width: 1024px)');
+    const alCambiarAncho = (e: MediaQueryListEvent) => {
+      if (e.matches) cerrarMovilRef.current();
+    };
+    window.addEventListener('keydown', alPresionar);
+    escritorio.addEventListener('change', alCambiarAncho);
+
+    return () => {
+      window.clearTimeout(t);
+      document.body.style.overflow = overflowPrevio;
+      window.removeEventListener('keydown', alPresionar);
+      escritorio.removeEventListener('change', alCambiarAncho);
+      focoPrevio?.focus?.();
+    };
+  }, [mobileOpen]);
+
+  // Deslizar a la izquierda sobre el panel lo cierra
+  const alIniciarToque = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    toqueInicio.current = { x: t.clientX, y: t.clientY };
+  };
+  const alTerminarToque = (e: React.TouchEvent) => {
+    const inicio = toqueInicio.current;
+    toqueInicio.current = null;
+    if (!inicio) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - inicio.x;
+    const dy = t.clientY - inicio.y;
+    if (dx < -60 && Math.abs(dx) > Math.abs(dy)) onCloseMobile();
+  };
+
+  const irAInicio = () => {
+    onTabChange(roleConfig.defaultTab);
+    onCloseMobile();
+  };
+
+  /** Contenido del menú. En móvil siempre va expandido y con objetivos táctiles de 44 px. */
+  const renderContenido = (movil: boolean) => {
+    const compacto = !movil && isCollapsed;
+    return (
+      <div className="flex flex-col h-full bg-white dark:bg-[#121722] text-slate-900 dark:text-slate-100 border-r border-slate-200/80 dark:border-slate-800/80 select-none transition-all duration-150">
+        {/* Brand Header */}
+        <div className={`p-4 border-b border-slate-100 dark:border-slate-800/60 flex flex-col ${compacto ? 'items-center' : 'items-stretch'}`}>
+          <div className={`flex items-center gap-2 ${compacto ? 'justify-center' : 'justify-between'}`}>
+            {!compacto ? (
+              <div onClick={irAInicio} className="flex items-center gap-2.5 cursor-pointer group min-w-0">
+                <img
+                  src="/logo-emblema-96.png"
+                  alt="Colegio Centro América"
+                  width={36}
+                  height={36}
+                  className={`${movil ? 'w-10 h-10' : 'w-9 h-9'} rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain shrink-0 transition-opacity group-hover:opacity-90`}
+                />
+                <div className="leading-tight min-w-0">
+                  <span className={`font-semibold tracking-tight text-slate-900 dark:text-white ${movil ? 'text-sm' : 'text-xs'}`}>
+                    Cultura CCA
+                  </span>
+                  <span className={`block text-slate-400 dark:text-slate-500 truncate ${movil ? 'text-xs' : 'text-[11px]'}`}>
+                    {roleConfig.roleBadgeLabel}
+                  </span>
+                </div>
+              </div>
+            ) : (
               <img
                 src="/logo-emblema-96.png"
                 alt="Colegio Centro América"
+                title="Cultura CCA"
                 width={36}
                 height={36}
-                className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain shrink-0 transition-opacity group-hover:opacity-90"
+                onClick={irAInicio}
+                className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain cursor-pointer hover:opacity-90"
               />
-              <div className="leading-tight">
-                <span className="font-semibold text-xs tracking-tight text-slate-900 dark:text-white">
-                  Cultura CCA
-                </span>
-                <span className="block text-[11px] text-slate-400 dark:text-slate-500">
-                  {roleConfig.roleBadgeLabel}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <img
-              src="/logo-emblema-96.png"
-              alt="Colegio Centro América"
-              title="Cultura CCA"
-              width={36}
-              height={36}
-              onClick={() => onTabChange(roleConfig.defaultTab)}
-              className="w-9 h-9 rounded-lg bg-white ring-1 ring-slate-200 dark:ring-slate-700 object-contain cursor-pointer hover:opacity-90"
-            />
-          )}
-
-          {/* Collapse toggle (desktop only) */}
-          <button
-            onClick={onToggleCollapse}
-            className="hidden lg:flex p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-            title={isCollapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
-          >
-            {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Nav Menu Categories */}
-      <div className="flex-1 py-3 px-2 space-y-4 overflow-y-auto">
-        {categories.map((cat, idx) => (
-          <div key={idx} className="space-y-0.5">
-            {!isCollapsed && (
-              <div className="px-2.5 pb-1 text-[10px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500">
-                {cat.title}
-              </div>
             )}
-            {cat.items.map((item) => {
-              const isActive = currentTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    onTabChange(item.id);
-                    onCloseMobile();
-                  }}
-                  title={isCollapsed ? item.label : undefined}
-                  className={`w-full flex items-center ${
-                    isCollapsed ? 'justify-center px-0 py-2' : 'justify-start px-2.5 py-1.5 space-x-2.5'
-                  } rounded-lg text-xs transition-colors cursor-pointer ${
-                    isActive
-                      ? 'bg-slate-100 dark:bg-slate-800/70 text-indigo-600 dark:text-indigo-400 font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/30'
+
+            {movil ? (
+              /* Cerrar (solo móvil) */
+              <button
+                ref={cerrarRef}
+                type="button"
+                onClick={onCloseMobile}
+                className="w-11 h-11 -mr-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer shrink-0"
+                aria-label="Cerrar menú"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            ) : (
+              /* Contraer (solo escritorio) */
+              <button
+                onClick={onToggleCollapse}
+                className="flex p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                title={isCollapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+              >
+                {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Nav Menu Categories */}
+        <nav className={`flex-1 py-3 px-2 overflow-y-auto overscroll-contain ${movil ? 'space-y-5' : 'space-y-4'}`} aria-label="Navegación principal">
+          {categories.map((cat, idx) => (
+            <div key={idx} className={movil ? 'space-y-1' : 'space-y-0.5'}>
+              {!compacto && (
+                <div
+                  className={`px-2.5 pb-1 font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500 ${
+                    movil ? 'text-[11px]' : 'text-[10px]'
                   }`}
                 >
-                  <span className={isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}>
-                    {item.icon}
-                  </span>
-                  {!isCollapsed && <span className="truncate">{item.label}</span>}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+                  {cat.title}
+                </div>
+              )}
+              {cat.items.map((item) => {
+                const isActive = currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      onTabChange(item.id);
+                      onCloseMobile();
+                    }}
+                    title={compacto ? item.label : undefined}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`w-full flex items-center rounded-lg transition-colors cursor-pointer ${
+                      compacto
+                        ? 'justify-center px-0 py-2 text-xs'
+                        : movil
+                        ? 'justify-start min-h-11 px-3 gap-3 text-sm'
+                        : 'justify-start px-2.5 py-1.5 gap-2.5 text-xs'
+                    } ${
+                      isActive
+                        ? 'bg-slate-100 dark:bg-slate-800/70 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/30 active:bg-slate-100 dark:active:bg-slate-800/60'
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 ${movil ? '[&>svg]:w-5 [&>svg]:h-5' : ''} ${
+                        isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {item.icon}
+                    </span>
+                    {!compacto && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
-      {/* Minimal Footer */}
-      <div className="p-3 border-t border-slate-100 dark:border-slate-800/60">
-        {!isCollapsed ? (
-          <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 px-1">
-            <span className="flex items-center gap-1.5">
+        {/* Minimal Footer */}
+        <div className="p-3 border-t border-slate-100 dark:border-slate-800/60">
+          {!compacto ? (
+            <div className={`flex items-center justify-between text-slate-400 dark:text-slate-500 px-1 ${movil ? 'text-xs' : 'text-[11px]'}`}>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span className="truncate">{cicloActual()}</span>
+              </span>
+              <span className="font-mono text-[10px]">v2.4</span>
+            </div>
+          ) : (
+            <div className="flex justify-center" title={`${cicloActual()} activo`}>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span className="truncate">{cicloActual()}</span>
-            </span>
-            <span className="font-mono text-[10px]">v2.4</span>
-          </div>
-        ) : (
-          <div className="flex justify-center" title={`${cicloActual()} activo`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -291,20 +372,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isCollapsed ? 'w-[64px]' : 'w-[230px]'
         }`}
       >
-        {sidebarContent}
+        {renderContenido(false)}
       </aside>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
-            onClick={onCloseMobile}
-          />
-          <div className="relative w-64 max-w-[80vw] h-full shadow-xl z-10 animate-slideRight">
-            {sidebarContent}
-          </div>
+      {/* Panel móvil: siempre montado para animar la entrada y la salida */}
+      <div className="lg:hidden" aria-hidden={!mobileOpen} inert={!mobileOpen}>
+        <div
+          className={`fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200 ${
+            mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={onCloseMobile}
+        />
+        <div
+          id="menu-movil"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú principal"
+          onTouchStart={alIniciarToque}
+          onTouchEnd={alTerminarToque}
+          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-dvh shadow-2xl bg-white dark:bg-[#121722] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 ease-out will-change-transform ${
+            mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+          }`}
+        >
+          {renderContenido(true)}
         </div>
-      )}
+      </div>
     </>
   );
 };

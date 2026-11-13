@@ -106,7 +106,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3.5 rounded-xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between animate-fadeIn shadow-xs">
@@ -131,10 +131,10 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               <FileSignature className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
                 Módulo de Matrícula de Alumnos
               </h1>
-              <p className="text-xs text-[#667085] dark:text-[#94A3B8]">
+              <p className="text-[11px] sm:text-xs text-[#667085] dark:text-[#94A3B8]">
                 Registro de datos de alumnos, selección de talleres extracurriculares y contratos digitales firmados.
               </p>
             </div>
@@ -165,13 +165,13 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Solicitudes */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Total Solicitudes
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-[#172033] dark:text-[#F1F5F9] font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-[#172033] dark:text-[#F1F5F9] font-mono">
                 {metrics.total}
               </span>
               <span className="text-[10px] text-slate-500 font-semibold">
@@ -179,19 +179,19 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
             <FileSignature className="w-5 h-5" />
           </div>
         </div>
 
         {/* Contratos Firmados */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Contratos Firmados
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-[#4F46E5] dark:text-[#818CF8] font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-[#4F46E5] dark:text-[#818CF8] font-mono">
                 {metrics.contratosFirmados}
               </span>
               <span className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded font-semibold border border-indigo-200 dark:border-indigo-900">
@@ -199,19 +199,19 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-[#4F46E5] dark:text-[#818CF8] flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-[#4F46E5] dark:text-[#818CF8] flex items-center justify-center">
             <Shield className="w-5 h-5" />
           </div>
         </div>
 
         {/* Pendientes de Caja */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Pendientes de Pago
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">
                 {metrics.pendientesCaja}
               </span>
               <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 rounded font-semibold border border-amber-200 dark:border-amber-900">
@@ -219,19 +219,19 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <Clock className="w-5 h-5" />
           </div>
         </div>
 
         {/* Matrículas Formalizadas */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Matrículas Formalizadas
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                 {metrics.formalizadas}
               </span>
               <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded font-semibold border border-emerald-200 dark:border-emerald-900">
@@ -239,7 +239,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
             <FileCheck2 className="w-5 h-5" />
           </div>
         </div>
@@ -518,9 +518,9 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
 
       {/* Modal: Ver Contrato y Firma Digital */}
       {selectedForContractView && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9] flex flex-col">
-            <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
               <div className="flex items-center space-x-2">
                 <FileSignature className="w-5 h-5 text-indigo-400" />
                 <h3 className="text-base font-bold">
@@ -535,7 +535,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
               <div className="p-4 bg-[#F7F8FA] dark:bg-[#151A22] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] font-mono text-[11px] leading-relaxed text-[#172033] dark:text-[#F1F5F9] whitespace-pre-line max-h-72 overflow-y-auto select-text border-l-4 border-l-[#4F46E5]">
                 {selectedForContractView.contrato_texto}
               </div>
@@ -590,9 +590,9 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
 
       {/* Modal: Constancia Oficial de Matrícula */}
       {selectedForCertificate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9] flex flex-col">
-            <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800">
+            <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center space-x-2">
                 <FileCheck2 className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-base font-bold">Constancia Oficial de Matrícula</h3>
@@ -605,7 +605,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs font-sans">
+            <div className="p-4 sm:p-6 space-y-4 text-xs font-sans">
               <div className="text-center pb-3 border-b border-slate-200 dark:border-slate-800 space-y-1">
                 <h2 className="text-base font-bold text-[#172033] dark:text-[#F1F5F9] tracking-wide">
                   {nombreInstitucion().toUpperCase()}

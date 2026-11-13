@@ -125,7 +125,7 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
 
   return (
     <div className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex flex-col">
-      <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
+      <div className="p-3.5 sm:p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <ShieldAlert className="w-4 h-4 text-amber-500" />
           <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Monitoreo de Ausentismo</h2>
@@ -222,7 +222,7 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
 
       <div className="p-4 flex-1 overflow-y-auto max-h-[520px] space-y-3">
         {rangoInvalido ? (
-          <p className="py-8 text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
+          <p className="py-5 sm:py-8 text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
             La fecha "Hasta" debe ser igual o posterior a "Desde".
           </p>
         ) : enRiesgo.length === 0 ? (

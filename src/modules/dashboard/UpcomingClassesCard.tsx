@@ -143,7 +143,7 @@ export const UpcomingClassesCard: React.FC<UpcomingClassesCardProps> = ({ grupos
   return (
     <section className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex flex-col overflow-hidden">
       {/* Encabezado */}
-      <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between gap-2">
+      <div className="p-3.5 sm:p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8]" />
           <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Próximas clases</h2>
@@ -229,7 +229,7 @@ export const UpcomingClassesCard: React.FC<UpcomingClassesCardProps> = ({ grupos
       {/* Agenda */}
       <div className="p-4 max-h-[520px] overflow-y-auto">
         {rangoInvalido ? (
-          <p className="py-8 text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
+          <p className="py-5 sm:py-8 text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
             La fecha "Hasta" debe ser igual o posterior a "Desde".
           </p>
         ) : enRango.length === 0 ? (

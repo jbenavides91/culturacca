@@ -231,7 +231,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
   const formatDate = formatFechaCaja;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3.5 rounded-xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between animate-fadeIn shadow-xs">
@@ -256,10 +256,10 @@ export const CashierView: React.FC<CashierViewProps> = ({
               <Receipt className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
                 Módulo de Caja y Solvencia
               </h1>
-              <p className="text-xs text-[#667085] dark:text-[#94A3B8]">
+              <p className="text-[11px] sm:text-xs text-[#667085] dark:text-[#94A3B8]">
                 Ventanilla de cobros: validación de contratos digitales, registro de recibos contables y emisión de solvencias para aceptar la matrícula.
               </p>
             </div>
@@ -278,13 +278,13 @@ export const CashierView: React.FC<CashierViewProps> = ({
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Pendientes de Cobro */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Por Cobrar en Ventanilla
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">
                 {metrics.pendientes}
               </span>
               <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 rounded font-semibold border border-amber-200 dark:border-amber-900">
@@ -292,19 +292,19 @@ export const CashierView: React.FC<CashierViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <Clock className="w-5 h-5" />
           </div>
         </div>
 
         {/* Matrículas Formalizadas en Caja */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Matrículas Formalizadas
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                 {metrics.formalizadas}
               </span>
               <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded font-semibold border border-emerald-200 dark:border-emerald-900">
@@ -312,36 +312,36 @@ export const CashierView: React.FC<CashierViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
             <FileCheck2 className="w-5 h-5" />
           </div>
         </div>
 
         {/* Recaudación Total en Caja */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Recaudación en Caja
             </span>
             <div className="flex items-baseline space-x-1">
-              <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                 C$ {metrics.totalRecaudado.toLocaleString()}
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
             <CreditCard className="w-5 h-5" />
           </div>
         </div>
 
         {/* Recibos Contables Emitidos */}
-        <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#1B222D] p-3 sm:p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">
               Recibos Contables
             </span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-[#172033] dark:text-[#F1F5F9] font-mono">
+              <span className="text-xl sm:text-2xl font-bold text-[#172033] dark:text-[#F1F5F9] font-mono">
                 {metrics.recibosEmitidos}
               </span>
               <span className="text-[10px] text-slate-500 font-semibold">
@@ -349,7 +349,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
               </span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
             <Receipt className="w-5 h-5" />
           </div>
         </div>
@@ -669,12 +669,12 @@ export const CashierView: React.FC<CashierViewProps> = ({
 
       {/* Cashier Terminal Modal */}
       {selectedForValidation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9] flex flex-col">
             {/* Header */}
-            <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
                   <Receipt className="w-5 h-5" />
                 </div>
                 <div>
@@ -698,7 +698,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
             </div>
 
             {/* Body */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5">
               {validationError && (
                 <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center space-x-2">
                   <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
@@ -925,7 +925,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
                     type="button"
                     onClick={handleProcessPaymentAndFormalize}
                     disabled={isProcessing || !validDatos || !validContrato || !numRecibo.trim()}
-                    className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <UserCheck className="w-4 h-4 stroke-[2.5]" />
                     <span>{isProcessing ? 'Procesando y Formalizando...' : 'Procesar Pago y Formalizar Matrícula'}</span>

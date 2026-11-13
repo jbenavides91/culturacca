@@ -21,6 +21,8 @@ interface TopbarProps {
   currentTab: string;
   currentProfile: Perfil;
   onToggleMobileMenu: () => void;
+  /** Si el menú lateral móvil está abierto (para aria-expanded) */
+  mobileMenuOpen?: boolean;
   onNavigateTab: (tab: any) => void;
   onLogout?: () => void;
   onOpenNewWorkshop?: () => void;
@@ -31,6 +33,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   currentTab,
   currentProfile,
   onToggleMobileMenu,
+  mobileMenuOpen = false,
   onNavigateTab,
   onLogout,
 }) => {
@@ -100,10 +103,12 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="flex items-center space-x-3">
         <button
           onClick={onToggleMobileMenu}
-          className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+          className="lg:hidden -ml-2 w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 active:bg-slate-200 dark:active:bg-slate-800 transition-colors cursor-pointer"
           aria-label="Abrir menú"
+          aria-expanded={mobileMenuOpen}
+          aria-controls="menu-movil"
         >
-          <Menu className="w-4 h-4" />
+          <Menu className="w-5 h-5" />
         </button>
 
         <nav className="flex items-center gap-1.5 text-xs">
@@ -213,7 +218,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       {/* Global Search Dialog */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 pt-20 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full border border-slate-200/80 dark:border-slate-800 overflow-hidden">
             <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center gap-2.5">
               <Search className="w-4 h-4 text-slate-400" />
@@ -235,7 +240,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
             <div className="max-h-72 overflow-y-auto p-3 space-y-3 text-xs">
               {!searchQuery.trim() ? (
-                <div className="text-center py-6 text-slate-400 text-xs">
+                <div className="text-center py-4 sm:py-6 text-slate-400 text-xs">
                   Escribe para buscar en tiempo real...
                 </div>
               ) : (
@@ -301,7 +306,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                   )}
 
                   {searchResults.estudiantes.length === 0 && searchResults.grupos.length === 0 && (
-                    <div className="text-center py-6 text-slate-400 text-xs">
+                    <div className="text-center py-4 sm:py-6 text-slate-400 text-xs">
                       No se encontraron resultados para &quot;{searchQuery}&quot;.
                     </div>
                   )}

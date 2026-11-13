@@ -140,7 +140,7 @@ export const ContractTemplateTab: React.FC = () => {
 
       <div className="bg-white dark:bg-[#141A23] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden">
         {/* Encabezado */}
-        <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800">
+        <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <FileSignature className="w-5 h-5 text-indigo-400 shrink-0" />
             <div>

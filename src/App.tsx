@@ -104,7 +104,7 @@ export default function App() {
   const canAccessCaja = isTabAllowedForRole(activeProfile.rol, 'caja');
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 overflow-hidden antialiased transition-colors">
+    <div className="flex h-dvh bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 overflow-hidden antialiased transition-colors">
       {/* Sidebar (Desktop and Mobile drawer) */}
       <Sidebar
         currentTab={currentTab}
@@ -126,6 +126,7 @@ export default function App() {
           currentTab={currentTab}
           currentProfile={activeProfile}
           onToggleMobileMenu={() => setMobileDrawerOpen(true)}
+          mobileMenuOpen={mobileDrawerOpen}
           onNavigateTab={(tab) => setCurrentTab(tab)}
           onLogout={handleLogout}
           onOpenNewWorkshop={() => setOpenNewWorkshopModal(true)}
@@ -135,7 +136,7 @@ export default function App() {
         {/* Scrollable View Area */}
         <main className="flex-1 overflow-y-auto">
           {!isTabAllowedForRole(activeProfile.rol, currentTab) ? (
-            <div className="p-8 max-w-lg mx-auto my-16 text-center bg-white dark:bg-[#1B222D] rounded-2xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs space-y-4">
+            <div className="p-5 sm:p-8 max-w-lg mx-3 sm:mx-auto my-8 sm:my-16 text-center bg-white dark:bg-[#1B222D] rounded-2xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs space-y-4">
               <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
                 <Shield className="w-6 h-6" />
               </div>

@@ -41,10 +41,10 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
   }, []);
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-8 animate-fadeIn">
       {/* Executive Welcome & Header */}
-      <div className="pb-6 border-b border-[#E7EAF0] dark:border-[#2B3442]">
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
+      <div className="pb-3 sm:pb-6 border-b border-[#E7EAF0] dark:border-[#2B3442]">
+        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
           Dashboard
         </h1>
       </div>
@@ -69,10 +69,10 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
       />
 
       {/* Main Grid: Workshops Overview & Watchlist */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Left Column: Workshops Status Table (2 spans) */}
         <div className="lg:col-span-2 bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] overflow-hidden shadow-xs">
-          <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
+          <div className="p-3.5 sm:p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">
                 Rendimiento por Taller Vespertino
@@ -156,7 +156,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
         </div>
 
         {/* Right Column: Próximas clases + Critical Alert Watchlist */}
-        <div className="flex flex-col gap-6 min-w-0">
+        <div className="flex flex-col gap-4 sm:gap-6 min-w-0">
         <UpcomingClassesCard grupos={grupos} sesiones={sesiones} perfiles={perfiles} />
 
         <AbsenteeismMonitorCard

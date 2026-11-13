@@ -234,10 +234,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9] flex flex-col">
         {/* Header */}
-        <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
               <UserPlus className="w-5 h-5" />
@@ -258,7 +258,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
         </div>
 
         {/* Stepper Wizard Progress */}
-        <div className="bg-[#F7F8FA] dark:bg-[#151A22] border-b border-[#E7EAF0] dark:border-[#2B3442] px-6 py-3 shrink-0">
+        <div className="bg-[#F7F8FA] dark:bg-[#151A22] border-b border-[#E7EAF0] dark:border-[#2B3442] px-4 sm:px-6 py-3 shrink-0">
           <div className="flex items-center justify-between max-w-xl mx-auto text-xs">
             {/* Step 1 */}
             <div
@@ -345,7 +345,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
         )}
 
         {/* Modal Body / Steps */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           {/* STEP 1: Student and Tutor Information */}
           {step === 1 && (
             <form onSubmit={handleValidateStep1} className="space-y-5">
@@ -735,7 +735,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   type="button"
                   onClick={handleSubmitEnrollment}
                   disabled={isSubmitting || !firmaDigitalUrl || !aceptaTerminos}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
+                  className="px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <span>Registrando Solicitud...</span>
@@ -752,7 +752,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
 
           {/* STEP 4: Success & Voucher */}
           {step === 4 && createdSolicitud && (
-            <div className="space-y-6 text-center py-4 animate-fadeIn">
+            <div className="space-y-4 sm:space-y-6 text-center py-4 animate-fadeIn">
               <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-300 dark:border-emerald-800">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
@@ -825,7 +825,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+                  className="px-4 sm:px-6 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
                 >
                   Entendido y Finalizar
                 </button>

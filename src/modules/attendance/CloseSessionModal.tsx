@@ -43,10 +43,10 @@ export const CloseSessionModal: React.FC<CloseSessionModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9]">
         {/* Header */}
-        <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800">
+        <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#4F46E5] flex items-center justify-center text-white">
               <CheckCircle className="w-4 h-4" />
@@ -69,7 +69,7 @@ export const CloseSessionModal: React.FC<CloseSessionModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 text-xs">
+        <div className="p-4 sm:p-6 space-y-4 text-xs">
           {/* Summary Cards */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[#DCFCE7] dark:bg-[#052E16] border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl text-center">

@@ -192,10 +192,10 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
 
   const inputClass =
     'text-xs rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D] text-[#172033] dark:text-[#F1F5F9] px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]';
-  const tarjeta = 'bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs';
-  const etiqueta = 'flex items-center justify-between text-[#667085] dark:text-[#94A3B8] text-xs font-medium';
-  const valor = 'text-2xl lg:text-3xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9] tabular-nums';
-  const pie = 'mt-2 text-[11px] text-[#667085] dark:text-[#94A3B8]';
+  const tarjeta = 'bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs';
+  const etiqueta = 'flex items-start justify-between gap-1 text-[#667085] dark:text-[#94A3B8] text-[11px] sm:text-xs font-medium';
+  const valor = 'text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9] tabular-nums';
+  const pie = 'mt-2 text-[10px] sm:text-[11px] text-[#667085] dark:text-[#94A3B8]';
 
   return (
     <section className="space-y-3">
@@ -276,7 +276,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
       )}
 
       {/* Tarjetas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Asistencia */}
         <div className={tarjeta}>
           <div className={etiqueta}>

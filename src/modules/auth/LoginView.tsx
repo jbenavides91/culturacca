@@ -95,9 +95,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialError = null }) => 
             <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               Cultura CCA
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Ingresa tus credenciales institucionales para acceder
-            </p>
           </div>
 
           {/* Error Notice */}

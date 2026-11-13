@@ -205,7 +205,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notice */}
       {toastMessage && (
         <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-3 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs flex items-center justify-between">
@@ -217,12 +217,12 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       )}
 
       {/* Clean Minimalist Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-slate-100 dark:border-slate-800/80">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             {currentProfile.rol === 'ADMIN' ? 'Talleres Vespertinos' : 'Mis talleres'}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {currentProfile.rol === 'ADMIN'
               ? 'Gestión de horarios, asignación docente y matrícula de participantes.'
               : 'Horarios, aulas asignadas y acceso directo a la toma de asistencia.'}
@@ -251,7 +251,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
 
         if (visibleGrupos.length === 0) {
           return (
-            <div className="text-center py-12 bg-white dark:bg-[#141A23] rounded-xl border border-slate-200/80 dark:border-slate-800/80 p-8 space-y-2">
+            <div className="text-center py-12 bg-white dark:bg-[#141A23] rounded-xl border border-slate-200/80 dark:border-slate-800/80 p-5 sm:p-8 space-y-2">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                 No tienes talleres asignados actualmente
               </p>
@@ -275,7 +275,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                   key={grupo.id}
                   className="bg-white dark:bg-[#141A23] rounded-xl border border-slate-200/80 dark:border-slate-800/80 overflow-hidden flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                 >
-              <div className="p-5 space-y-3.5">
+              <div className="p-3.5 sm:p-5 space-y-3.5">
                 {/* Title */}
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -399,9 +399,9 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
 
       {/* Minimalist Modal: Registrar Nuevo Taller */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                 Registrar Nuevo Taller
               </h3>
@@ -413,7 +413,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateWorkshop} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleCreateWorkshop} className="p-4 sm:p-6 space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Nombre del Taller
@@ -579,9 +579,9 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
 
       {/* Minimalist Modal: Editar Taller */}
       {editingGrupo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -596,7 +596,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleUpdateWorkshop} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleUpdateWorkshop} className="p-4 sm:p-6 space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Nombre del Taller

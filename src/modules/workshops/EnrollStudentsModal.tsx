@@ -282,10 +282,10 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
   const diasTexto = (grupo.dias_semana || []).map((d) => DIAS_LABELS[d] || d).join(', ');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-3xl w-full max-h-[88vh] overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100 flex flex-col">
         {/* Minimalist Clean Header */}
-        <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between gap-4 shrink-0">
+        <div className="px-4 sm:px-6 py-4.5 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between gap-4 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white tracking-tight">
@@ -321,7 +321,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
         </div>
 
         {/* Minimalist Controls Toolbar */}
-        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 shrink-0 space-y-2.5">
+        <div className="px-4 sm:px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 shrink-0 space-y-2.5">
           {/* Top Line: Search + Dropdowns */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             {/* Search Input */}
@@ -602,13 +602,13 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
         {/* Error notice if any */}
         {saveError && (
-          <div className="px-6 py-2.5 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs">
+          <div className="px-4 sm:px-6 py-2.5 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs">
             {saveError}
           </div>
         )}
 
         {/* Minimal Footer */}
-        <div className="px-6 py-3.5 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between shrink-0">
           <span className="text-xs text-slate-500 dark:text-slate-400">
             <strong className="text-slate-900 dark:text-white font-semibold">
               {selectedIds.size}

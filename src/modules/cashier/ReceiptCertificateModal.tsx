@@ -24,9 +24,9 @@ interface ReceiptCertificateModalProps {
 }
 
 export const ReceiptCertificateModal: React.FC<ReceiptCertificateModalProps> = ({ solicitud, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
     <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9] flex flex-col">
-      <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center justify-between border-b border-slate-800">
+      <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center justify-between border-b border-slate-800">
         <div className="flex items-center space-x-2">
           <FileCheck2 className="w-5 h-5 text-emerald-400" />
           <h3 className="text-base font-bold">Comprobante y Constancia Oficial de Matrícula</h3>
@@ -36,7 +36,7 @@ export const ReceiptCertificateModal: React.FC<ReceiptCertificateModalProps> = (
         </button>
       </div>
 
-      <div className="p-6 space-y-4 text-xs font-sans">
+      <div className="p-4 sm:p-6 space-y-4 text-xs font-sans">
         <div className="text-center pb-3 border-b border-slate-200 dark:border-slate-800 space-y-1">
           <h2 className="text-base font-bold text-[#172033] dark:text-[#F1F5F9] tracking-wide">
             {nombreInstitucion().toUpperCase()}

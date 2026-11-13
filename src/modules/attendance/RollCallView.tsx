@@ -473,7 +473,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
   }, [sesiones, activeSesion]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Feedback */}
       {feedbackMessage && (
         <div
@@ -1178,7 +1178,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-[#E7EAF0] dark:divide-[#2B3442]">
           {filteredStudents.length === 0 ? (
-            <div className="p-8 text-center text-[#667085] dark:text-[#94A3B8] text-xs">
+            <div className="p-5 sm:p-8 text-center text-[#667085] dark:text-[#94A3B8] text-xs">
               No hay alumnos que coincidan con la búsqueda.
             </div>
           ) : (
@@ -1308,7 +1308,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
       {/* Modals */}
       {extraModalOpen && activeGrupo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-xl max-w-sm w-full overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9]">
             <div className="px-5 py-4 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1319,7 +1319,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleCrearSesionExtra} className="p-5 space-y-3 text-xs">
+            <form onSubmit={handleCrearSesionExtra} className="p-3.5 sm:p-5 space-y-3 text-xs">
               <p className="text-[#667085] dark:text-[#94A3B8] leading-relaxed">
                 Clase de <strong>{activeGrupo.nombre}</strong> fuera de sus días habituales (reposición o clase extra).
                 Se conserva aunque cambien las fechas o los días del taller.

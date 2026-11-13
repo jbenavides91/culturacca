@@ -135,7 +135,7 @@ export const GradosTab: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-[#141A23] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-        <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center gap-2.5 border-b border-slate-800">
+        <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center gap-2.5 border-b border-slate-800">
           <GraduationCap className="w-5 h-5 text-indigo-400 shrink-0" />
           <div>
             <h3 className="text-sm font-bold">Grados Escolares</h3>

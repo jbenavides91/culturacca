@@ -96,7 +96,7 @@ export const AnecdotarioModal: React.FC<AnecdotarioModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-labelledby="anecdotario-titulo"
@@ -127,7 +127,7 @@ export const AnecdotarioModal: React.FC<AnecdotarioModalProps> = ({
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-5 space-y-5 text-xs">
+        <div className="overflow-y-auto flex-1 p-3.5 sm:p-5 space-y-5 text-xs">
           {/* Formulario */}
           {puedeEscribir && (
             <form onSubmit={handleGuardar} className="space-y-3 p-4 rounded-xl bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442]">

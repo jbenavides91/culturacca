@@ -154,7 +154,7 @@ export const SalonesTab: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-[#141A23] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-        <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800">
+        <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <DoorOpen className="w-5 h-5 text-indigo-400 shrink-0" />
             <div>
@@ -303,9 +303,9 @@ export const SalonesTab: React.FC = () => {
 
       {/* Modal crear / editar */}
       {modalAbierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DoorOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold">{editando ? 'Editar salón' : 'Nuevo salón'}</h3>
@@ -319,7 +319,7 @@ export const SalonesTab: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleGuardar} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleGuardar} className="p-4 sm:p-6 space-y-4 text-xs">
               {error && (
                 <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />

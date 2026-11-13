@@ -189,7 +189,7 @@ export const AnecdotarioAlumnoModal: React.FC<AnecdotarioAlumnoModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-labelledby="historial-anecdotario-titulo"
@@ -304,7 +304,7 @@ export const AnecdotarioAlumnoModal: React.FC<AnecdotarioAlumnoModalProps> = ({
         </div>
 
         {/* Historial */}
-        <div className="overflow-y-auto flex-1 p-5">
+        <div className="overflow-y-auto flex-1 p-3.5 sm:p-5">
           {historial.length === 0 ? (
             <p className="py-12 text-center text-xs text-[#667085] dark:text-[#94A3B8]">
               {anotaciones.length === 0

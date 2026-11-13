@@ -47,10 +47,10 @@ export const ReceiptsHistoryTab: React.FC = () => {
   }, [conPago, searchQuery]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
           <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
             Recaudación en Caja
           </span>
@@ -62,7 +62,7 @@ export const ReceiptsHistoryTab: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs">
           <span className="text-[10px] font-bold text-[#667085] dark:text-[#94A3B8] uppercase tracking-wider block">
             Recibos Contables
           </span>

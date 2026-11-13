@@ -412,7 +412,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const countAlertas = alertas.filter((a) => a.tiene_alerta).length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notice */}
       {toastMessage && (
         <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3 rounded-xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between font-medium">
@@ -446,12 +446,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-slate-100 dark:border-slate-800/80">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Estudiantes y Expedientes
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Matrículas formalizadas con contrato digital, renovación anual con firma y gestión de bajas sin eliminar registros.
           </p>
         </div>
@@ -787,9 +787,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
       {/* MODAL: DAR DE BAJA TEMPORAL */}
       {studentToBaja && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserMinus className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -804,7 +804,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleConfirmBaja} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleConfirmBaja} className="p-4 sm:p-6 space-y-4 text-xs">
               <div className="bg-rose-50/70 dark:bg-rose-950/30 p-3.5 rounded-xl border border-rose-200/80 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 text-xs space-y-1">
                 <p className="font-semibold">
                   Alumno: {studentToBaja.nombre} {studentToBaja.apellido} ({studentToBaja.matricula})
@@ -868,9 +868,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
       {/* MODAL: RENOVACIÓN ANUAL DE CONTRATO Y PAGO CON FIRMA DIGITAL */}
       {studentToRenovar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn overflow-y-auto">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-2xl max-w-2xl w-full my-8 overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -885,7 +885,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleConfirmRenovacion} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleConfirmRenovacion} className="p-4 sm:p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
               {renovacionError && (
                 <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1191,9 +1191,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
       {/* Modal: Editar Alumno */}
       {editingStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1208,7 +1208,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleUpdateStudent} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleUpdateStudent} className="p-4 sm:p-6 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">

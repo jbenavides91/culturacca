@@ -94,11 +94,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Printable Document Modal */}
       {showPrintPreview && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs p-4 sm:p-8 flex justify-center animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 space-y-6 print:p-0 print:shadow-none border border-slate-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-5 sm:p-8 space-y-4 sm:space-y-6 print:p-0 print:shadow-none border border-slate-200">
             {/* Print Header Controls (Hidden when printing) */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-200 print:hidden">
               <span className="text-xs font-bold text-slate-500 uppercase">Vista Previa de Impresión Oficial</span>
@@ -176,16 +176,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E7EAF0] dark:border-[#2B3442]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 sm:pb-4 border-b border-[#E7EAF0] dark:border-[#2B3442]">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#172033] dark:text-[#F1F5F9] tracking-tight">
+          <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-[#172033] dark:text-[#F1F5F9] tracking-tight">
             {currentProfile.rol === 'PROFESOR'
               ? 'Reportes de Asistencia y Anecdotario'
               : currentProfile.rol === 'CAJERO'
               ? 'Reportes de Caja'
               : 'Reportes Consolidados y Matriz de Asistencia'}
           </h1>
-          <p className="text-xs text-[#667085] dark:text-[#94A3B8] mt-1">
+          <p className="text-[11px] sm:text-xs text-[#667085] dark:text-[#94A3B8] mt-1">
             {currentProfile.rol === 'PROFESOR'
               ? 'Seguimiento de ausentismo, alertas de tus talleres asignados e historial de tus anotaciones del anecdotario.'
               : currentProfile.rol === 'CAJERO'
@@ -259,7 +259,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
       <>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs">
           <span className="text-[10px] font-bold text-[#667085] dark:text-[#94A3B8] uppercase tracking-wider block">
             Índice de Asistencia
           </span>
@@ -274,7 +274,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
           </span>
         </div>
 
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-xs">
           <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
             Alertas Críticas ({config.limite_ausencias_alerta}+ faltas)
           </span>
@@ -289,7 +289,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
           </span>
         </div>
 
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 shadow-xs">
           <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
             Advertencias de Inasistencia
           </span>
@@ -304,7 +304,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
           </span>
         </div>
 
-        <div className="bg-white dark:bg-[#1B222D] p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
+        <div className="bg-white dark:bg-[#1B222D] p-3.5 sm:p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
           <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
             Asistencia Regular
           </span>

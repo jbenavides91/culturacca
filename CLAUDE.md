@@ -32,6 +32,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Navigation is state-based, not routed.** `src/App.tsx` holds `currentTab: NavTab` (type defined in `modules/navigation/Sidebar.tsx`) and conditionally renders one view per tab. Cross-module navigation is done via callbacks passed down from `App` (e.g. `onSelectWorkshop` sets the selected group and switches to the `asistencia` tab). When adding a tab: update `NavTab`, `Sidebar`, `ROLE_CONFIGS` in `utils/rbac.ts`, and the render switch in `App.tsx`.
 
+**Mobile menu** (below `lg`):
+- `Sidebar` renders `renderContenido(movil)` twice: as the desktop `<aside>` and as a drawer (`#menu-movil`).
+- The drawer is always mounted, so it can animate in and out (`translate-x` plus a fading backdrop). While closed it is `inert` and `aria-hidden`.
+- It is always expanded, ignoring the desktop `isCollapsed`, and has 44 px touch targets (`min-h-11`).
+- It closes with ✕, Escape, a tap on the backdrop, a left swipe, choosing an item or the logo, or when the window grows to `lg`.
+- While open it locks body scroll and moves focus to ✕, then restores both on close. `onCloseMobile` is kept in a ref, because `App` passes a new function on every render.
+- The hamburger in `Topbar` is 44 px and has `aria-expanded`.
+- The root container uses `h-dvh`, not `h-screen`, so mobile browser bars don't hide content. `index.html` sets `viewport-fit=cover`, and the drawer pads with `env(safe-area-inset-*)`.
+
 **RBAC** (`src/utils/rbac.ts`): roles `ADMIN`, `PROFESOR`, `CAJERO`, `MATRICULA`, each with an allowed-tab list and a default tab. `App` blocks disallowed tabs; views also receive `currentProfile` and filter data by role (e.g. professors see only their own groups). The UI rules must stay consistent with the RLS write policies in the SQL migrations. Reads are open to any active profile, except `anecdotario` (see below). Writes:
 - ADMIN: everything; only ADMIN writes `grupos`, `perfiles`, `configuracion`, `salones` and `grados`.
 - PROFESOR: `asistencias`, `sesiones`, `log_notificaciones`, and inserting its own `anecdotario` notes.
@@ -148,6 +157,16 @@ To change or regenerate them:
 The sidebar header (`Sidebar.tsx`, expanded and collapsed) and the login top bar show the emblem on a white rounded badge, so it stays visible in dark mode. The login screen (`LoginView.tsx`) has a full-width top bar: the brand on the left edge and the theme toggle on the right, not a centered `max-w` container. In dark mode the card's full logo sits on a white plate, because its navy text is invisible on the dark card. Browsers and installed PWAs cache icons aggressively, so a hard reload or reinstall may be needed to see a change.
 
 **Styling**: Tailwind v4 via `@tailwindcss/vite`, configured in `src/index.css` (no tailwind.config). Dark mode is class-based (`@custom-variant dark`) toggled by `context/ThemeContext.tsx`. Components use many hard-coded hex colors (e.g. `#4F46E5` primary, `#1B222D` dark surface) alongside Tailwind palette classes. Icons from `lucide-react`, animation from `motion`.
+
+**Mobile-first spacing convention.** The base class is the compact phone value and the desktop value goes under `sm:`, so phones stay compact and tablet or desktop look unchanged. New code must follow these patterns, which are already applied across all views and modals:
+- View root: `p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6`.
+- Page `<h1>`: `text-lg sm:text-2xl` (the Panel and Reportes add `lg:text-3xl`). Its description is `text-[11px] sm:text-xs`, and the header uses `pb-3 sm:pb-4`.
+- Cards: `p-3.5 sm:p-5` or `p-4 sm:p-6`.
+- Dark card and modal header bands: `px-4 sm:px-6 py-3 sm:py-4`.
+- Modal overlay: `fixed inset-0 … p-2 sm:p-4`.
+- Gaps: `gap-4 sm:gap-6`.
+- KPI and metric strips use 2 columns on phones (`grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4`). They have `p-3 sm:p-4` cards, `w-8 h-8 sm:w-10 sm:h-10` icons and `text-xl sm:text-2xl` numbers.
+- Avoid an unprefixed `p-6`, `p-8`, `px-6`, `text-2xl` or `space-y-6` in layout code.
 
 ## Troubleshooting (issues already diagnosed)
 

@@ -98,7 +98,7 @@ export const AttendanceWeekGrid: React.FC<AttendanceWeekGridProps> = ({ filas, s
 
   if (talleres.length === 0) {
     return (
-      <p className="py-8 px-4 text-center text-xs text-[#667085] dark:text-[#94A3B8]">
+      <p className="py-5 sm:py-8 px-4 text-center text-xs text-[#667085] dark:text-[#94A3B8]">
         No hay sesiones en esta semana con los filtros actuales.
       </p>
     );

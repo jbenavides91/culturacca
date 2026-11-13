@@ -305,7 +305,7 @@ export const AttendanceStatusPanel: React.FC<AttendanceStatusPanelProps> = ({
   return (
     <section className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs overflow-hidden">
       {/* Encabezado */}
-      <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-3.5 sm:p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <CalendarCheck className="w-5 h-5 text-[#4F46E5] dark:text-[#818CF8] shrink-0" />
           <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Estatus de Toma de Asistencia</h2>

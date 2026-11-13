@@ -329,7 +329,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
   }, [perfiles, roleFilter, searchUserQuery]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notice */}
       {toastMessage && (
         <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3.5 rounded-xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between animate-fadeIn font-semibold">
@@ -347,12 +347,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 sm:pb-4 border-b border-slate-200/80 dark:border-slate-800">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Configuración del Sistema
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Administración de cuentas de usuario, roles, reglas institucionales, salones, grados y contrato de matrícula.
           </p>
         </div>
@@ -662,7 +662,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* TAB 2: REGLAS Y PARÁMETROS */}
       {activeTab === 'reglas' && (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-4 sm:space-y-6 animate-fadeIn">
           {savedSuccess && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3.5 rounded-xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center space-x-2 animate-fadeIn font-semibold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -672,7 +672,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
           {/* Rules and Thresholds Form */}
           <div className="bg-white dark:bg-[#141A23] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-            <div className="bg-[#172033] dark:bg-[#151A22] px-6 py-4 text-white flex items-center space-x-2.5 border-b border-slate-800">
+            <div className="bg-[#172033] dark:bg-[#151A22] px-4 sm:px-6 py-3 sm:py-4 text-white flex items-center space-x-2.5 border-b border-slate-800">
               <ShieldAlert className="w-5 h-5 text-indigo-400" />
               <div>
                 <h3 className="text-sm font-bold">
@@ -684,7 +684,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
               </div>
             </div>
 
-            <form onSubmit={handleSaveConfig} className="p-6 space-y-6 text-xs">
+            <form onSubmit={handleSaveConfig} className="p-4 sm:p-6 space-y-4 sm:space-y-6 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="bg-slate-50 dark:bg-[#1A222D] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
                   <label className="block font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px]">
@@ -831,9 +831,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* MODAL: CREAR NUEVO USUARIO */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -848,7 +848,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleCreateUser} className="p-4 sm:p-6 space-y-4 text-xs">
               {createError && (
                 <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1098,9 +1098,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* MODAL: EDITAR USUARIO */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1115,7 +1115,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
               </button>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleUpdateUser} className="p-4 sm:p-6 space-y-4 text-xs">
               {editError && (
                 <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
