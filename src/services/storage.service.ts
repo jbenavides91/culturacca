@@ -1101,8 +1101,15 @@ class StorageService {
   }
 
   // --- VISTA CALCULADA DE ALERTAS (vista_alerta_estudiantes) ---
-  calcularAlertasEstudiantes(grupoId?: string): AlertaEstudiante[] {
-    const cacheKey = `alertas_${grupoId || 'todas'}`;
+  /**
+   * Alertas por alumno y taller. Sin `rango` cuenta todas las sesiones cerradas del ciclo;
+   * con `rango` (fechas YYYY-MM-DD, ambas opcionales) solo las sesiones cerradas en esas fechas,
+   * y los umbrales de Configuración se aplican sobre ese período.
+   */
+  calcularAlertasEstudiantes(grupoId?: string, rango?: { desde?: string; hasta?: string }): AlertaEstudiante[] {
+    const desde = rango?.desde || '0000-01-01';
+    const hasta = rango?.hasta || '9999-12-31';
+    const cacheKey = `alertas_${grupoId || 'todas'}${rango ? `_${desde}_${hasta}` : ''}`;
     const cached = cacheService.get<AlertaEstudiante[]>(cacheKey);
     if (cached) return cached;
 
@@ -1118,7 +1125,9 @@ class StorageService {
 
     grupos.forEach((grupo) => {
       // Sesiones cerradas de este grupo
-      const sesionesCerradas = sesiones.filter((s) => s.grupo_id === grupo.id && s.cerrada);
+      const sesionesCerradas = sesiones.filter(
+        (s) => s.grupo_id === grupo.id && s.cerrada && s.fecha >= desde && s.fecha <= hasta
+      );
       const sesionIdsCerradas = new Set(sesionesCerradas.map((s) => s.id));
       const totalSesionesCerradas = sesionesCerradas.length;
 

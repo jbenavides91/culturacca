@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Users, ArrowRight, ShieldAlert, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { AttendanceStatusPanel } from './AttendanceStatusPanel';
 import { UpcomingClassesCard } from './UpcomingClassesCard';
 import { DashboardKpis } from './DashboardKpis';
+import { AbsenteeismMonitorCard } from './AbsenteeismMonitorCard';
 import { Grupo, Sesion, Asistencia, Estudiante, Tutor, Perfil } from '../../types/attendance';
 
 interface ExecutiveDashboardViewProps {
@@ -38,12 +39,6 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
     const unsub = subscribeToData(() => loadData());
     return () => unsub();
   }, []);
-
-  // Alumnos en riesgo (Monitoreo de Ausentismo): siempre sobre todo el ciclo y todos los talleres
-  const stats = useMemo(
-    () => ({ enRiesgoCritico: storageService.calcularAlertasEstudiantes().filter((a) => a.tiene_alerta) }),
-    [asistencias, sesiones, estudiantes, grupos, tutores]
-  );
 
   return (
     <div className="p-6 lg:p-8 space-y-8 animate-fadeIn">
@@ -164,70 +159,11 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
         <div className="flex flex-col gap-6 min-w-0">
         <UpcomingClassesCard grupos={grupos} sesiones={sesiones} perfiles={perfiles} />
 
-        <div className="bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs flex flex-col">
-          <div className="p-5 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ShieldAlert className="w-4 h-4 text-amber-500" />
-              <h2 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">
-                Monitoreo de Ausentismo
-              </h2>
-            </div>
-            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-              {stats.enRiesgoCritico.length} Casos
-            </span>
-          </div>
-
-          <div className="p-4 flex-1 overflow-y-auto space-y-3">
-            {stats.enRiesgoCritico.length === 0 ? (
-              <div className="py-10 text-center text-[#667085] dark:text-[#94A3B8]">
-                <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                <p className="text-xs font-semibold">Sin alertas críticas de ausentismo</p>
-                <p className="text-[11px] text-slate-400 mt-1">Todos los alumnos mantienen asistencia regular.</p>
-              </div>
-            ) : (
-              stats.enRiesgoCritico.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-2 text-xs"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-bold text-[#172033] dark:text-[#F1F5F9] block">
-                        {item.estudiante_nombre}
-                      </span>
-                      <span className="text-[11px] text-[#667085] dark:text-[#94A3B8]">
-                        {item.grupo_nombre}
-                      </span>
-                    </div>
-                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-900">
-                      {item.total_ausencias} inasistencias
-                    </span>
-                  </div>
-
-                  <div className="text-[11px] text-[#667085] dark:text-[#94A3B8] border-t border-amber-200/60 dark:border-amber-900/40 pt-2 flex items-center justify-between">
-                    <span>Tutor: {item.tutor_nombre || 'N/A'}</span>
-                    <button
-                      onClick={() => onNavigateTab('estudiantes')}
-                      className="text-[#4F46E5] dark:text-[#818CF8] hover:underline font-semibold text-[11px] flex items-center space-x-1"
-                    >
-                      <Users className="w-3 h-3" />
-                      <span>Ver ficha</span>
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="p-4 border-t border-[#E7EAF0] dark:border-[#2B3442] bg-[#F7F8FA] dark:bg-[#151A22] text-center">
-            <button
-              onClick={() => onNavigateTab('estudiantes')}
-              className="text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline"
-            >
-              Consultar directorio de estudiantes & tutores
-            </button>
-          </div>
-        </div>
+        <AbsenteeismMonitorCard
+          sesiones={sesiones}
+          asistencias={asistencias}
+          onVerEstudiantes={() => onNavigateTab('estudiantes')}
+        />
         </div>
       </div>
     </div>

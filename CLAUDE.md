@@ -103,7 +103,11 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
     - Talleres & Comunidad: workshops with classes in the period, plus their distinct active enrolled students and tutors.
   - With no filters, Talleres & Comunidad keeps the global totals.
   - **Alertas de Inasistencia** respond only to the workshop filter, because alerts are cumulative over the cycle (`calcularAlertasEstudiantes(grupoId)`).
-  - Monitoreo de Ausentismo always uses the unfiltered alerts.
+  - **Monitoreo de Ausentismo** (`AbsenteeismMonitorCard`, right column below Próximas clases) lists students with `tiene_alerta`, sorted by absences.
+    - It has its own date filter, independent of the KPI filters and remembered under `cca_panel_ausentismo_filtros`: Semana / Mes / Ciclo (default) / Rango.
+    - It calls `calcularAlertasEstudiantes(undefined, { desde, hasta })`. With a range, only closed sessions in those dates count, and the Configuración thresholds apply to that period.
+    - Without a range, the method behaves exactly as before, so every other caller is unchanged.
+    - The range is part of the cache key under the `alertas` tag.
   - Shared pieces live in `attendanceStatus.shared.tsx`. Those are `ESTADOS`, `FilaEstatus`, `FilaSesion`, `BadgeExtra`, and the UTC date helpers on `YYYY-MM-DD` strings (`sumarDias`, `lunesDe`, `inicioDeMes`, `finDeMes`, `sumarMeses`). Use them instead of `new Date('YYYY-MM-DD')`.
 - **Reportes** has three tabs:
   - **Matriz de Asistencia**: ADMIN and PROFESOR.
