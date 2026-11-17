@@ -9,6 +9,8 @@ import {
   UserPlus,
   Pencil,
   Banknote,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Grupo, Perfil, Salon } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -48,6 +50,10 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [costo, setCosto] = useState('');
   const [editFechaInicio, setEditFechaInicio] = useState('');
   const [editFechaFin, setEditFechaFin] = useState('');
+
+  // Delete Workshop state
+  const [grupoAEliminar, setGrupoAEliminar] = useState<Grupo | null>(null);
+  const [confirmNombreEliminar, setConfirmNombreEliminar] = useState('');
 
   // Form states for new workshop
   const [nombre, setNombre] = useState('');
@@ -127,6 +133,36 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       loadData();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error al actualizar el taller');
+    }
+  };
+
+  const resumenEliminar = grupoAEliminar ? storageService.resumenEliminacionGrupo(grupoAEliminar.id) : null;
+  // Con historial de asistencia se exige escribir el nombre del taller para confirmar
+  const requiereNombreEliminar = !!resumenEliminar && resumenEliminar.asistencias > 0;
+  const puedeEliminar =
+    !!grupoAEliminar &&
+    (!requiereNombreEliminar ||
+      confirmNombreEliminar.trim().toLowerCase() === grupoAEliminar.nombre.trim().toLowerCase());
+
+  const handleOpenDeleteModal = (g: Grupo) => {
+    setGrupoAEliminar(g);
+    setConfirmNombreEliminar('');
+  };
+
+  const handleDeleteWorkshop = () => {
+    if (!grupoAEliminar || !puedeEliminar) return;
+    try {
+      const res = storageService.eliminarGrupo(grupoAEliminar.id);
+      setToastMessage(
+        `Taller "${grupoAEliminar.nombre}" eliminado.` +
+          (res.alumnosLiberados > 0
+            ? ` ${res.alumnosLiberados} alumno${res.alumnosLiberados > 1 ? 's quedaron disponibles' : ' quedó disponible'} para inscribirse en otro taller.`
+            : '')
+      );
+      setGrupoAEliminar(null);
+      loadData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar el taller');
     }
   };
 
@@ -355,8 +391,8 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
+              <div className="px-3 sm:px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
                   {currentProfile.rol === 'ADMIN' && (
                     <>
                       <button
@@ -366,6 +402,14 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         <span>Editar</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenDeleteModal(grupo)}
+                        className="px-2.5 py-1 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50/60 dark:hover:bg-rose-950/30 rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-medium"
+                        title="Eliminar taller"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Eliminar</span>
                       </button>
                       <button
                         onClick={() => {
@@ -765,6 +809,111 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Eliminar Taller */}
+      {grupoAEliminar && resumenEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#141A23] rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                  Eliminar Taller: {grupoAEliminar.nombre}
+                </h3>
+              </div>
+              <button
+                onClick={() => setGrupoAEliminar(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-3 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                {resumenEliminar.alumnosInscritos > 0 ? (
+                  <>
+                    Se quitará la inscripción de{' '}
+                    <strong className="text-slate-900 dark:text-white">
+                      {resumenEliminar.alumnosInscritos} alumno{resumenEliminar.alumnosInscritos > 1 ? 's' : ''}
+                    </strong>
+                    ; quedarán disponibles para inscribirse en otro taller (no se dan de baja).
+                  </>
+                ) : (
+                  'Este taller no tiene alumnos inscritos.'
+                )}
+              </p>
+
+              {resumenEliminar.asistencias > 0 || resumenEliminar.sesionesCerradas > 0 ? (
+                <div className="flex gap-2 p-3 rounded-lg bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-200">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Se eliminarán de forma permanente {resumenEliminar.sesiones} sesiones (
+                    {resumenEliminar.sesionesCerradas} cerradas) y {resumenEliminar.asistencias} registros de
+                    asistencia. Los reportes, la matriz y las alertas de este taller dejarán de mostrarse.
+                  </span>
+                </div>
+              ) : (
+                resumenEliminar.sesiones > 0 && (
+                  <p className="text-slate-500 dark:text-slate-400">
+                    También se eliminarán sus {resumenEliminar.sesiones} sesiones programadas (sin asistencia registrada).
+                  </p>
+                )
+              )}
+
+              {resumenEliminar.matriculasPendientes > 0 && (
+                <div className="flex gap-2 p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Hay {resumenEliminar.matriculasPendientes} matrícula
+                    {resumenEliminar.matriculasPendientes > 1 ? 's' : ''} pendiente
+                    {resumenEliminar.matriculasPendientes > 1 ? 's' : ''} de caja para este taller; no podrán
+                    aceptarse mientras apunten a un taller eliminado.
+                  </span>
+                </div>
+              )}
+
+              <p className="text-slate-500 dark:text-slate-400">
+                Las anotaciones del anecdotario y los recibos de matrícula se conservan.
+              </p>
+
+              {requiereNombreEliminar && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Para confirmar, escribe el nombre del taller:{' '}
+                    <span className="font-semibold">{grupoAEliminar.nombre}</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={confirmNombreEliminar}
+                    onChange={(e) => setConfirmNombreEliminar(e.target.value)}
+                    autoFocus
+                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGrupoAEliminar(null)}
+                  className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteWorkshop}
+                  disabled={!puedeEliminar}
+                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                >
+                  Eliminar taller
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

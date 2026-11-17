@@ -266,6 +266,67 @@ class StorageService {
     return { grupo: updatedGrupo, ...resumen };
   }
 
+  /** Qué se perdería / liberaría al eliminar un taller (solo lectura, para el diálogo de confirmación) */
+  resumenEliminacionGrupo(grupoId: string): {
+    alumnosInscritos: number;
+    sesiones: number;
+    sesionesCerradas: number;
+    asistencias: number;
+    matriculasPendientes: number;
+  } {
+    const sesiones = this.getSesiones().filter((s) => s.grupo_id === grupoId);
+    const idsSesiones = new Set(sesiones.map((s) => s.id));
+    return {
+      alumnosInscritos: new Set(
+        this.getInscripciones().filter((i) => i.grupo_id === grupoId).map((i) => i.estudiante_id)
+      ).size,
+      sesiones: sesiones.length,
+      sesionesCerradas: sesiones.filter((s) => s.cerrada).length,
+      asistencias: this.getAsistencias().filter((a) => idsSesiones.has(a.sesion_id)).length,
+      matriculasPendientes: this.getSolicitudesMatricula().filter(
+        (m) => m.grupo_id === grupoId && m.estado === 'PENDIENTE_CAJA'
+      ).length,
+    };
+  }
+
+  /**
+   * Elimina un taller (solo ADMIN). Sus alumnos quedan desinscritos y disponibles para otros
+   * talleres (su estado no cambia). Se borran sus sesiones y la asistencia registrada; el
+   * anecdotario y las matrículas se conservan. Se borra de hijo a padre para que la memoria
+   * local quede coherente sin esperar al realtime de la cascada de la BD.
+   */
+  eliminarGrupo(grupoId: string): { alumnosLiberados: number; sesionesEliminadas: number; asistenciasEliminadas: number } {
+    if (!this.getGrupoById(grupoId)) {
+      throw new Error('Taller no encontrado');
+    }
+
+    const sesionIds = this.getSesiones()
+      .filter((s) => s.grupo_id === grupoId)
+      .map((s) => s.id);
+    const idsSesiones = new Set(sesionIds);
+    const asistenciaIds = this.getAsistencias()
+      .filter((a) => idsSesiones.has(a.sesion_id))
+      .map((a) => a.id);
+    const inscripciones = this.getInscripciones().filter((i) => i.grupo_id === grupoId);
+    const alumnosLiberados = new Set(inscripciones.map((i) => i.estudiante_id)).size;
+
+    this.remove(STORAGE_KEYS.ASISTENCIAS, asistenciaIds);
+    this.remove(STORAGE_KEYS.SESIONES, sesionIds);
+    this.remove(STORAGE_KEYS.INSCRIPCIONES, inscripciones.map((i) => i.id));
+    this.remove(STORAGE_KEYS.GRUPOS, [grupoId]);
+
+    ['grupos', 'sesiones', 'inscripciones', 'estudiantes', 'asistencias', 'alertas'].forEach((tag) =>
+      cacheService.invalidateByTag(tag)
+    );
+    notifyDataChange();
+
+    return {
+      alumnosLiberados,
+      sesionesEliminadas: sesionIds.length,
+      asistenciasEliminadas: asistenciaIds.length,
+    };
+  }
+
   /** Fechas (YYYY-MM-DD) en que el taller tiene clase según su ciclo y días de la semana */
   private generarFechasSesiones(grupo: Grupo): string[] {
     // Aritmética 100% UTC: el día de la semana y la fecha guardada salen del mismo calendario,
