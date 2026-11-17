@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- `npm install --legacy-peer-deps` (a pre-existing esbuild/vite peer conflict makes plain `npm install` fail; a `bun.lock` is also present)
+- `npm install` / `npm ci`: `.npmrc` sets `legacy-peer-deps=true` because of a pre-existing esbuild/vite peer conflict (needed by the Cloudflare Pages build too). npm is the only package manager (`package-lock.json`; the old `bun.lock` was removed so Cloudflare does not pick bun).
+- **Deploy**: Cloudflare Pages connected to GitHub (push to `main` publishes). Build `npm run build`, output `dist`, env vars `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `NODE_VERSION=22`. Steps and post-deploy settings (Supabase Site URL, `ALLOWED_ORIGINS`, Firebase authorized domains) are in `cloudflare/README.md`. **Status: in progress.**
 - Requires `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see `.env.example`); without it the app shows a "Falta configurar Supabase" screen.
 - `npm run dev`: Vite dev server on port 3000, bound to `0.0.0.0`
 - `npm run build` / `npm run preview`
