@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { Estudiante, Grupo, Tutor } from '../../types/attendance';
 import { indiceGrado } from '../../utils/grados';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 import { storageService } from '../../services/storage.service';
 
 interface EnrollStudentsModalProps {
@@ -38,6 +40,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
   // Minimalist filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [selectedGrado, setSelectedGrado] = useState<string>('');
   const [selectedAula, setSelectedAula] = useState<string>('');
   const [viewFilter, setViewFilter] = useState<ViewFilter>('todos');
@@ -134,7 +137,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
   // Filtered list
   const filteredEvaluations = useMemo(() => {
-    return studentEvaluations.filter((item) => {
+    const filtradas = studentEvaluations.filter((item) => {
       const est = item.estudiante;
       const tutor = item.tutor;
 
@@ -188,7 +191,13 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
       return true;
     });
+    return ordenarAlfabetico(
+      filtradas,
+      (i) => [i.estudiante.apellido, i.estudiante.nombre],
+      orden === 'ZA' ? 'ZA' : 'AZ'
+    );
   }, [
+    orden,
     studentEvaluations,
     searchQuery,
     selectedGrado,
@@ -378,6 +387,8 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
               </select>
               <ChevronDown className="w-3 h-3 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
+
+            <OrdenSelector value={orden} onChange={setOrden} />
 
             {/* Clear filters trigger if active */}
             {hasActiveFilters && (

@@ -21,6 +21,8 @@ import { EnrollStudentsModal } from './EnrollStudentsModal';
 import { SalonSelect } from './SalonSelect';
 import { VistaPreviaSesiones, contarSesionesPrevistas } from './VistaPreviaSesiones';
 import { arancelDeGrupo, arancelGeneral, etiquetaPeriodo, formatearMonto } from '../../utils/arancel';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 type VistaTalleres = 'tarjetas' | 'lista';
 const CLAVE_VISTA_TALLERES = 'cca_talleres_vista';
@@ -74,6 +76,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [vista, setVista] = useState<VistaTalleres>(leerVistaGuardada);
   const [busqueda, setBusqueda] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
 
   const cambiarVista = (v: VistaTalleres) => {
     setVista(v);
@@ -305,13 +308,16 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       ].join(' ')
     );
   };
-  const visibleGrupos =
+  const visibleGrupos = ordenarAlfabetico(
     terminos.length === 0
       ? gruposDelRol
       : gruposDelRol.filter((g) => {
           const texto = textoBuscable(g);
           return terminos.every((t) => texto.includes(t));
-        });
+        }),
+    (g) => [g.nombre],
+    orden === 'ZA' ? 'ZA' : 'AZ'
+  );
 
   /** Datos derivados de un taller, compartidos por las vistas de tarjetas y de lista */
   const datosTaller = (g: Grupo) => {
@@ -453,7 +459,8 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       {/* Barra de búsqueda */}
       {gruposDelRol.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-          <div className="relative w-full md:w-80">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none sm:w-64 md:w-80">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="search"
@@ -474,6 +481,8 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
+          <OrdenSelector value={orden} onChange={setOrden} />
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {terminos.length > 0

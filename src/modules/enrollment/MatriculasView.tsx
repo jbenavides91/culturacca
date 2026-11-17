@@ -22,6 +22,8 @@ import { storageService, subscribeToData } from '../../services/storage.service'
 import { NewEnrollmentWizardModal } from './NewEnrollmentWizardModal';
 import { cicloActual, nombreInstitucion } from '../../utils/institucion';
 import { formatearMonto, montoDeSolicitud } from '../../utils/arancel';
+import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 interface MatriculasViewProps {
   currentProfile: Perfil;
@@ -37,6 +39,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
   const [solicitudes, setSolicitudes] = useState<SolicitudMatricula[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [filterEstado, setFilterEstado] = useState<string>('TODAS');
   const [filterGrupo, setFilterGrupo] = useState<string>('TODOS');
 
@@ -70,7 +73,7 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
 
   // Filtered requests
   const filteredSolicitudes = useMemo(() => {
-    return solicitudes.filter((sol) => {
+    const filtradas = solicitudes.filter((sol) => {
       if (filterEstado !== 'TODAS' && sol.estado !== filterEstado) {
         return false;
       }
@@ -91,7 +94,11 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
       }
       return true;
     });
-  }, [solicitudes, filterEstado, filterGrupo, searchQuery]);
+    if (!esAlfabetico(orden)) {
+      return [...filtradas].sort((a, b) => (b.fecha_solicitud || '').localeCompare(a.fecha_solicitud || ''));
+    }
+    return ordenarAlfabetico(filtradas, (s) => [s.apellido_alumno, s.nombre_alumno], orden);
+  }, [solicitudes, filterEstado, filterGrupo, searchQuery, orden]);
 
   const formatDate = (iso: string) => {
     try {
@@ -310,12 +317,18 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
             className="px-3 py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-xs text-[#172033] dark:text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
           >
             <option value="TODOS">Todos los Talleres</option>
-            {grupos.map((g) => (
+            {ordenarAlfabetico(grupos, (g) => [g.nombre]).map((g) => (
               <option key={g.id} value={g.id}>
                 {g.nombre}
               </option>
             ))}
           </select>
+
+          <OrdenSelector
+            value={orden}
+            onChange={setOrden}
+            extra={[{ value: 'RECIENTES', label: 'Más recientes' }]}
+          />
         </div>
       </div>
 

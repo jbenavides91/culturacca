@@ -35,6 +35,8 @@ import {
 import { ContractTemplateTab } from './ContractTemplateTab';
 import { SalonesTab } from './SalonesTab';
 import { GradosTab } from './GradosTab';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'contrato';
 
@@ -60,6 +62,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
   // User management states
   const [searchUserQuery, setSearchUserQuery] = useState('');
+  const [ordenUsuarios, setOrdenUsuarios] = useState<Orden>('AZ');
   const [roleFilter, setRoleFilter] = useState<'TODOS' | UserRole>('TODOS');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Perfil | null>(null);
@@ -316,7 +319,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
   };
 
   const filteredUsers = useMemo(() => {
-    return perfiles.filter((p) => {
+    const filtrados = perfiles.filter((p) => {
       if (roleFilter !== 'TODOS' && p.rol !== roleFilter) return false;
       if (!searchUserQuery.trim()) return true;
       const q = searchUserQuery.toLowerCase();
@@ -326,7 +329,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
       const cargo = (p.cargo || '').toLowerCase();
       return fullName.includes(q) || username.includes(q) || email.includes(q) || cargo.includes(q);
     });
-  }, [perfiles, roleFilter, searchUserQuery]);
+    return ordenarAlfabetico(filtrados, (p) => [p.apellido, p.nombre], ordenUsuarios === 'ZA' ? 'ZA' : 'AZ');
+  }, [perfiles, roleFilter, searchUserQuery, ordenUsuarios]);
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
@@ -428,15 +432,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
           {/* Action Bar & Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#141A23] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="relative w-full sm:w-72">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchUserQuery}
-                  onChange={(e) => setSearchUserQuery(e.target.value)}
-                  placeholder="Buscar por nombre, usuario o correo..."
-                  className="w-full pl-8.5 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#1A222D] border border-slate-200 dark:border-slate-700/80 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-none sm:w-72">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchUserQuery}
+                    onChange={(e) => setSearchUserQuery(e.target.value)}
+                    placeholder="Buscar por nombre, usuario o correo..."
+                    className="w-full pl-8.5 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#1A222D] border border-slate-200 dark:border-slate-700/80 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <OrdenSelector value={ordenUsuarios} onChange={setOrdenUsuarios} />
               </div>
 
               {/* Role filter buttons */}

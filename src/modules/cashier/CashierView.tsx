@@ -23,6 +23,8 @@ import { storageService, subscribeToData } from '../../services/storage.service'
 import { ReceiptCertificateModal, formatFechaCaja } from './ReceiptCertificateModal';
 import { arancelGeneral, formatearMonto, montoDeSolicitud } from '../../utils/arancel';
 import { fechaLocalISO } from '../../utils/fechas';
+import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 interface CashierViewProps {
   currentProfile: Perfil;
@@ -36,6 +38,7 @@ export const CashierView: React.FC<CashierViewProps> = ({
   const [solicitudes, setSolicitudes] = useState<SolicitudMatricula[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   // Por defecto: lo que hay que cobrar hoy en ventanilla
   const [filterEstado, setFilterEstado] = useState<string>('PENDIENTE_CAJA');
 
@@ -148,10 +151,18 @@ export const CashierView: React.FC<CashierViewProps> = ({
     [solicitudesBase]
   );
 
-  const filteredSolicitudes = useMemo(
-    () => solicitudesBase.filter((sol) => filterEstado === 'TODAS' || sol.estado === filterEstado),
-    [solicitudesBase, filterEstado]
-  );
+  const filteredSolicitudes = useMemo(() => {
+    const filtradas = solicitudesBase.filter((sol) => filterEstado === 'TODAS' || sol.estado === filterEstado);
+    if (!esAlfabetico(orden)) {
+      // Más recientes: misma fecha de trámite que el filtro de fechas, con hora
+      const momento = (s: SolicitudMatricula) =>
+        new Date(
+          s.estado === 'PENDIENTE_CAJA' ? s.fecha_solicitud : s.fecha_pago || s.fecha_aceptacion || s.fecha_solicitud
+        ).getTime() || 0;
+      return [...filtradas].sort((a, b) => momento(b) - momento(a));
+    }
+    return ordenarAlfabetico(filtradas, (s) => [s.apellido_alumno, s.nombre_alumno], orden);
+  }, [solicitudesBase, filterEstado, orden]);
 
   // Accesos rápidos de rango
   const aplicarRapido = (tipo: 'hoy' | 'semana' | 'mes') => {
@@ -358,14 +369,21 @@ export const CashierView: React.FC<CashierViewProps> = ({
       {/* Filter and Search Bar */}
       <div className="bg-white dark:bg-[#1B222D] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs space-y-3">
       <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-[#667085] dark:text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por trámite, alumno, recibo o taller..."
-            className="w-full pl-9 pr-3 py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-xs text-[#172033] dark:text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-amber-500"
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:flex-none md:w-80">
+            <Search className="w-4 h-4 text-[#667085] dark:text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por trámite, alumno, recibo o taller..."
+              className="w-full pl-9 pr-3 py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-xs text-[#172033] dark:text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <OrdenSelector
+            value={orden}
+            onChange={setOrden}
+            extra={[{ value: 'RECIENTES', label: 'Más recientes' }]}
           />
         </div>
 

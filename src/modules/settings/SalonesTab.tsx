@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { Grupo, Salon } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 interface FormState {
   nombre: string;
@@ -28,6 +30,7 @@ export const SalonesTab: React.FC = () => {
   const [salones, setSalones] = useState<Salon[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [busqueda, setBusqueda] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [editando, setEditando] = useState<Salon | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [form, setForm] = useState<FormState>(FORM_VACIO);
@@ -57,11 +60,11 @@ export const SalonesTab: React.FC = () => {
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return salones;
-    return salones.filter(
-      (s) => s.nombre.toLowerCase().includes(q) || (s.ubicacion || '').toLowerCase().includes(q)
-    );
-  }, [salones, busqueda]);
+    const lista = !q
+      ? salones
+      : salones.filter((s) => s.nombre.toLowerCase().includes(q) || (s.ubicacion || '').toLowerCase().includes(q));
+    return ordenarAlfabetico(lista, (s) => [s.nombre], orden === 'ZA' ? 'ZA' : 'AZ');
+  }, [salones, busqueda, orden]);
 
   const avisar = (texto: string) => {
     setMensaje(texto);
@@ -175,15 +178,18 @@ export const SalonesTab: React.FC = () => {
         </div>
 
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por nombre o ubicación..."
-              className={`${inputClass} pl-8`}
-            />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none sm:w-72">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre o ubicación..."
+                className={`${inputClass} pl-8`}
+              />
+            </div>
+            <OrdenSelector value={orden} onChange={setOrden} />
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {salones.filter((s) => s.activo).length} activos • {salones.length} en total

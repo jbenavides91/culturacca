@@ -4,6 +4,8 @@ import { storageService } from '../../services/storage.service';
 import { Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
 import { fechaLocalISO } from '../../utils/fechas';
 import { finDeMes, inicioDeMes, lunesDe, sumarDias } from './attendanceStatus.shared';
+import { compararTexto, esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 type Periodo = 'semana' | 'mes' | 'ciclo' | 'rango';
 
@@ -64,6 +66,7 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
 }) => {
   const [filtros, setFiltros] = useState<Filtros>(leerFiltros);
   const { periodo, desde, hasta, grupoId } = filtros;
+  const [orden, setOrden] = useState<Orden>('AZ');
 
   // Si el taller guardado ya no existe, volver a "Todos"
   const grupoSel = grupoId === 'TODOS' || grupos.some((g) => g.id === grupoId) ? grupoId : 'TODOS';
@@ -104,12 +107,26 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
 
   const enRiesgo = useMemo(() => {
     if (rangoInvalido) return [];
-    return storageService
+    const casos = storageService
       .calcularAlertasEstudiantes(grupoSel === 'TODOS' ? undefined : grupoSel, rango)
-      .filter((a) => a.tiene_alerta)
-      .sort((a, b) => b.total_ausencias - a.total_ausencias || a.estudiante_nombre.localeCompare(b.estudiante_nombre));
+      .filter((a) => a.tiene_alerta);
+    if (!esAlfabetico(orden)) {
+      return casos.sort(
+        (a, b) => b.total_ausencias - a.total_ausencias || compararTexto(a.estudiante_nombre, b.estudiante_nombre)
+      );
+    }
+    // Por apellido y nombre del estudiante, luego por taller
+    const estudiantePorId = new Map(storageService.getEstudiantes().map((e) => [e.id, e]));
+    return ordenarAlfabetico(
+      casos,
+      (a) => {
+        const e = estudiantePorId.get(a.estudiante_id);
+        return [e?.apellido ?? a.estudiante_nombre, e?.nombre ?? '', a.grupo_nombre];
+      },
+      orden
+    );
     // sesiones y asistencias: recalcular cuando cambian los datos
-  }, [grupoSel, rango, rangoInvalido, sesiones, asistencias]);
+  }, [grupoSel, rango, rangoInvalido, sesiones, asistencias, orden]);
 
   const textoPeriodo =
     periodo === 'ciclo'
@@ -160,23 +177,26 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
           ))}
         </div>
 
-        <select
-          value={grupoSel}
-          onChange={(e) => actualizar({ grupoId: e.target.value })}
-          className={inputClass}
-          aria-label="Taller"
-        >
-          <option value="TODOS">Todos los talleres</option>
-          {gruposOrdenados.map((g) => {
-            const docente = nombreDocente(g.profesor_id);
-            return (
-              <option key={g.id} value={g.id}>
-                {g.nombre}
-                {docente ? ` (${docente})` : ''}
-              </option>
-            );
-          })}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={grupoSel}
+            onChange={(e) => actualizar({ grupoId: e.target.value })}
+            className={`${inputClass} min-w-0 flex-1`}
+            aria-label="Taller"
+          >
+            <option value="TODOS">Todos los talleres</option>
+            {gruposOrdenados.map((g) => {
+              const docente = nombreDocente(g.profesor_id);
+              return (
+                <option key={g.id} value={g.id}>
+                  {g.nombre}
+                  {docente ? ` (${docente})` : ''}
+                </option>
+              );
+            })}
+          </select>
+          <OrdenSelector value={orden} onChange={setOrden} extra={[{ value: 'FALTAS', label: 'Más faltas' }]} />
+        </div>
 
         {periodo === 'rango' && (
           <div className="grid grid-cols-2 gap-2 text-[11px] text-[#667085] dark:text-[#94A3B8]">

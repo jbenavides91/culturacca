@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { AnecdotarioModal } from '../students/AnecdotarioModal';
 import { fechaLocalISO } from '../../utils/fechas';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 type EstadoSesionUI = 'CERRADA' | 'HOY' | 'PENDIENTE' | 'PROGRAMADA';
 
@@ -86,6 +88,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
   // UI & Search states
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | EstatusAsistencia | 'ALERTAS'>('TODOS');
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'info' | 'warning'; text: string } | null>(null);
 
@@ -131,9 +134,10 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
   // Load and subscribe to data changes
   const refreshData = () => {
     const allGrupos = storageService.getGrupos();
-    const visibleGrupos = currentProfile.rol === 'PROFESOR'
-      ? allGrupos.filter((g) => g.profesor_id === currentProfile.id)
-      : allGrupos;
+    const visibleGrupos = ordenarAlfabetico(
+      currentProfile.rol === 'PROFESOR' ? allGrupos.filter((g) => g.profesor_id === currentProfile.id) : allGrupos,
+      (g) => [g.nombre]
+    );
     setGrupos(visibleGrupos);
 
     let activeGId = selectedGrupoId;
@@ -431,7 +435,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
   // Filtered and searched students
   const filteredStudents = useMemo(() => {
-    return estudiantes.filter((est) => {
+    const filtrados = estudiantes.filter((est) => {
       const fullName = `${est.nombre} ${est.apellido}`.toLowerCase();
       const matricula = est.matricula.toLowerCase();
       const q = searchQuery.toLowerCase();
@@ -448,7 +452,8 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       }
       return currentStatus === statusFilter;
     });
-  }, [estudiantes, searchQuery, statusFilter, asistencias, alertas]);
+    return ordenarAlfabetico(filtrados, (e) => [e.apellido, e.nombre], orden === 'ZA' ? 'ZA' : 'AZ');
+  }, [estudiantes, searchQuery, statusFilter, asistencias, alertas, orden]);
 
   // Aggregate metrics for this session
   const sessionMetrics = useMemo(() => {
@@ -886,15 +891,18 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por estudiante o matrícula..."
-            className="w-full pl-8.5 pr-3 py-2.5 sm:py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none sm:w-72">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por estudiante o matrícula..."
+              className="w-full pl-8.5 pr-3 py-2.5 sm:py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+          <OrdenSelector value={orden} onChange={setOrden} className="[&_select]:py-2.5 sm:[&_select]:py-1.5" />
         </div>
 
         {/* Filter Tabs (Native Segmented Control) */}

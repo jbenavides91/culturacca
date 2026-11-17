@@ -14,7 +14,9 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { AlertaEstudiante, Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
+import { AlertaEstudiante, Asistencia, Estudiante, Grupo, Perfil, Sesion } from '../../types/attendance';
+import { compararTexto, esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { exportService } from '../../services/export.service';
 import { ReceiptsHistoryTab } from './ReceiptsHistoryTab';
@@ -66,13 +68,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
   const [filasAbiertas, setFilasAbiertas] = useState<Set<string>>(new Set());
+  const [estudiantes, setEstudiantes] = useState<Estudiante[]>([]);
+  const [orden, setOrden] = useState<Orden>('AZ');
 
   const loadData = () => {
     let allGrupos = storageService.getGrupos();
     if (currentProfile.rol === 'PROFESOR') {
       allGrupos = allGrupos.filter((g) => g.profesor_id === currentProfile.id);
     }
-    setGrupos(allGrupos);
+    setGrupos(ordenarAlfabetico(allGrupos, (g) => [g.nombre]));
+    setEstudiantes(storageService.getEstudiantes());
     setAlertas(storageService.calcularAlertasEstudiantes());
     setConfig(storageService.getConfiguracion());
     setSesiones(storageService.getSesiones());
@@ -134,9 +139,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
       const myGroupIds = new Set(grupos.map((g) => g.id));
       base = base.filter((a) => myGroupIds.has(a.grupo_id));
     }
-    if (selectedGrupoId === 'TODOS') return base;
-    return base.filter((a) => a.grupo_id === selectedGrupoId);
-  }, [alertas, selectedGrupoId, currentProfile.rol, grupos]);
+    if (selectedGrupoId !== 'TODOS') base = base.filter((a) => a.grupo_id === selectedGrupoId);
+    if (!esAlfabetico(orden)) {
+      // Más faltas primero
+      return [...base].sort(
+        (a, b) => b.total_ausencias - a.total_ausencias || compararTexto(a.estudiante_nombre, b.estudiante_nombre)
+      );
+    }
+    // Por apellido y nombre del estudiante, luego por taller
+    const estudiantePorId = new Map(estudiantes.map((e) => [e.id, e]));
+    return ordenarAlfabetico(
+      base,
+      (a) => {
+        const e = estudiantePorId.get(a.estudiante_id);
+        return [e?.apellido ?? a.estudiante_nombre, e?.nombre ?? '', a.grupo_nombre];
+      },
+      orden
+    );
+  }, [alertas, selectedGrupoId, currentProfile.rol, grupos, estudiantes, orden]);
 
   const stats = useMemo(() => {
     const total = filteredAlertas.length;
@@ -395,8 +415,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
       </div>
 
       {/* Filter by Workshop */}
-      <div className="bg-white dark:bg-[#1B222D] rounded-xl p-3.5 shadow-xs border border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
-        <div className="flex items-center space-x-2">
+      <div className="bg-white dark:bg-[#1B222D] rounded-xl p-3.5 shadow-xs border border-[#E7EAF0] dark:border-[#2B3442] flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Filter className="w-4 h-4 text-[#667085] dark:text-[#94A3B8]" />
           <span className="text-xs font-semibold text-[#172033] dark:text-[#F1F5F9]">Filtrar por Taller:</span>
           <select
@@ -411,6 +431,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
               </option>
             ))}
           </select>
+          <OrdenSelector
+            value={orden}
+            onChange={setOrden}
+            extra={[{ value: 'FALTAS', label: 'Más faltas' }]}
+          />
         </div>
 
         <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-mono">

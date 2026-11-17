@@ -3,6 +3,8 @@ import { ChevronRight, FileSpreadsheet, Search, Users, X } from 'lucide-react';
 import { Anotacion, Estudiante, Grupo, Inscripcion, Perfil, TipoAnotacion } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { exportService } from '../../services/export.service';
+import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 import { TIPOS, formatearFechaHora } from '../students/AnecdotarioModal';
 import { AnecdotarioAlumnoModal, TIPOS_LISTA, nombreCompleto, nombreTallerDe } from './AnecdotarioAlumnoModal';
 
@@ -24,6 +26,7 @@ export const AnecdotarioHistoryTab: React.FC<AnecdotarioHistoryTabProps> = ({ cu
   const [grupoId, setGrupoId] = useState('TODOS');
   const [incluirBajas, setIncluirBajas] = useState(false);
   const [soloConAnotaciones, setSoloConAnotaciones] = useState(false);
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [abierto, setAbierto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,7 +39,7 @@ export const AnecdotarioHistoryTab: React.FC<AnecdotarioHistoryTabProps> = ({ cu
         lista = lista.filter((a) => a.autor_id === currentProfile.id);
       }
       const idsGrupos = new Set(gs.map((g) => g.id));
-      setGrupos([...gs].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setGrupos(ordenarAlfabetico(gs, (g) => [g.nombre]));
       setAnotaciones(lista);
       setInscripciones(storageService.getInscripciones().filter((i) => esAdmin || idsGrupos.has(i.grupo_id)));
       setEstudiantes(storageService.getEstudiantes());
@@ -93,14 +96,19 @@ export const AnecdotarioHistoryTab: React.FC<AnecdotarioHistoryTabProps> = ({ cu
     });
     conteoPorAlumno.forEach((_, id) => ids.add(id));
 
-    return Array.from(ids)
+    const lista = Array.from(ids)
       .map((id) => estudiantePorId.get(id))
       .filter((e): e is Estudiante => !!e)
       .filter((e) => grupoId === 'TODOS' || (talleresDe.get(e.id) || []).includes(grupoId))
       .filter((e) => !q || nombreCompleto(e).toLowerCase().includes(q) || (e.matricula || '').toLowerCase().includes(q))
-      .filter((e) => !soloConAnotaciones || conteoPorAlumno.has(e.id))
-      .sort((a, b) => a.apellido.localeCompare(b.apellido) || a.nombre.localeCompare(b.nombre));
-  }, [estudiantes, esAdmin, talleresDe, incluirBajas, conteoPorAlumno, estudiantePorId, grupoId, q, soloConAnotaciones]);
+      .filter((e) => !soloConAnotaciones || conteoPorAlumno.has(e.id));
+    const alfabetico = ordenarAlfabetico(lista, (e) => [e.apellido, e.nombre], esAlfabetico(orden) ? orden : 'AZ');
+    if (esAlfabetico(orden)) return alfabetico;
+    // Más anotaciones primero (empates en orden alfabético; sort es estable)
+    return alfabetico.sort(
+      (a, b) => (conteoPorAlumno.get(b.id)?.total ?? 0) - (conteoPorAlumno.get(a.id)?.total ?? 0)
+    );
+  }, [estudiantes, esAdmin, talleresDe, incluirBajas, conteoPorAlumno, estudiantePorId, grupoId, q, soloConAnotaciones, orden]);
 
   const resumen = useMemo(() => {
     const porTipo: Record<TipoAnotacion, number> = { COMENTARIO: 0, INDISCIPLINA: 0, LOGRO: 0 };
@@ -196,6 +204,11 @@ export const AnecdotarioHistoryTab: React.FC<AnecdotarioHistoryTabProps> = ({ cu
               </option>
             ))}
           </select>
+          <OrdenSelector
+            value={orden}
+            onChange={setOrden}
+            extra={[{ value: 'ANOTACIONES', label: 'Más anotaciones' }]}
+          />
           <label className="flex items-center gap-1.5 text-[11px] text-[#667085] dark:text-[#94A3B8] cursor-pointer">
             <input type="checkbox" checked={soloConAnotaciones} onChange={(e) => setSoloConAnotaciones(e.target.checked)} />
             Solo con anotaciones

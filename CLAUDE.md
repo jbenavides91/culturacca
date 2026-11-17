@@ -77,7 +77,7 @@ Workshops are assigned to teachers from the Talleres form (`asignarTallerADocent
 - `notification.service.ts`: sends absence emails via the Gmail REST API with an idempotency key and exponential-backoff retry; with no token it simulates an "SMTP institucional" send. Each attempt yields a `LogNotificacion`.
 - `calendar.service.ts`: creates Google Calendar events.
 - `export.service.ts`: Excel export via `xlsx`.
-  - `exportGroupToExcel(grupoId)` exports a single workshop's matrix (from Toma de Asistencia, or from Reportes → Matriz with one workshop selected).
+  - `exportGroupToExcel(grupoId)` exports a single workshop's matrix (from Toma de Asistencia, or from Reportes → Matriz with one workshop selected). Its Matriz Asistencia and Alertas sheets include the student's **Grado** and **Aula** (`aula_regular`; "Sin grado" / "Sin aula" when empty) right after the name, rows sorted by apellido and nombre, with `!autofilter` and `!cols` via the module-level `hojaTabla()` helper shared with the consolidated export. In the Resumen sheet, the workshop's room is labelled "Salón del taller".
   - `exportConsolidatedExcel('TODOS', gruposPermitidos)` builds a workbook with **4 fixed sheets, never one tab per workshop**:
     - Resumen Institucional;
     - Resumen por Taller (one row per workshop with totals and alerts);
@@ -206,6 +206,8 @@ To change or regenerate them:
 - ImageMagick and Python are not installed on this machine.
 
 The sidebar header (`Sidebar.tsx`, expanded and collapsed) and the login top bar show the emblem on a white rounded badge, so it stays visible in dark mode. The login screen (`LoginView.tsx`) has a full-width top bar: the brand on the left edge and the theme toggle on the right, not a centered `max-w` container. In dark mode the card's full logo sits on a white plate, because its navy text is invisible on the dark card. Browsers and installed PWAs cache icons aggressively, so a hard reload or reinstall may be needed to see a change.
+
+**List ordering**: every list has an `OrdenSelector` (`src/components/OrdenSelector.tsx`, a compact "A → Z / Z → A" select plus optional list-specific options) and sorts with `ordenarAlfabetico(lista, x => [claves], dir)` from `src/utils/orden.ts` (`compararTexto` = `localeCompare('es', { sensitivity: 'base', numeric: true })`: ignores case and accents, "Aula 2" before "Aula 10"). Lists always open in **A → Z** (state is not persisted). People sort by **apellido, then nombre**; `AlertaEstudiante` has only `estudiante_nombre`, so look the student up by `estudiante_id` to get the surname. Extra options keep the old order where it meant something: Matrículas and Caja "Más recientes", Recibos "Pago más reciente", Matriz and Monitoreo de Ausentismo "Más faltas", Anecdotario "Más anotaciones", Panel → Talleres "Más atrasados". Covered: Talleres, Estudiantes, Matrículas, Caja, Usuarios, Salones, Toma de Asistencia (and its workshop picker), the enrollment modal, Matriz (and its print), Recibos, Anecdotario, Panel → Talleres and Monitoreo. Workshop `<select>`s in filters are A → Z without a control. **Grados is excluded** (its `orden` is the school order). A new list should use the same two pieces.
 
 **Styling**: Tailwind v4 via `@tailwindcss/vite`, configured in `src/index.css` (no tailwind.config). Dark mode is class-based (`@custom-variant dark`) toggled by `context/ThemeContext.tsx`. Components use many hard-coded hex colors (e.g. `#4F46E5` primary, `#1B222D` dark surface) alongside Tailwind palette classes. Icons from `lucide-react`, animation from `motion`.
 

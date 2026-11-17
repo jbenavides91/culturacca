@@ -5,6 +5,8 @@ import { storageService, subscribeToData } from '../../services/storage.service'
 import { ReceiptCertificateModal, formatFechaCaja } from '../cashier/ReceiptCertificateModal';
 import { formatearMonto, montoDeSolicitud } from '../../utils/arancel';
 import { fechaLocalISO } from '../../utils/fechas';
+import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 type Periodo = 'todo' | 'hoy' | 'semana' | 'mes' | 'rango';
 
@@ -32,6 +34,7 @@ const fechaCorta = (iso: string) => {
 export const ReceiptsHistoryTab: React.FC = () => {
   const [solicitudes, setSolicitudes] = useState<SolicitudMatricula[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [selectedForCertificate, setSelectedForCertificate] = useState<SolicitudMatricula | null>(null);
   const [periodo, setPeriodo] = useState<Periodo>('todo');
   const [desde, setDesde] = useState('');
@@ -109,18 +112,25 @@ export const ReceiptsHistoryTab: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return conPago;
-    return conPago.filter((sol) =>
-      [
-        sol.codigo_solicitud,
-        sol.codigo_alumno,
-        `${sol.nombre_alumno} ${sol.apellido_alumno}`,
-        sol.numero_recibo_caja || '',
-        sol.grupo_nombre,
-        sol.tutor_nombre,
-      ].some((v) => v.toLowerCase().includes(q))
-    );
-  }, [conPago, searchQuery]);
+    const lista = !q
+      ? conPago
+      : conPago.filter((sol) =>
+          [
+            sol.codigo_solicitud,
+            sol.codigo_alumno,
+            `${sol.nombre_alumno} ${sol.apellido_alumno}`,
+            sol.numero_recibo_caja || '',
+            sol.grupo_nombre,
+            sol.tutor_nombre,
+          ].some((v) => v.toLowerCase().includes(q))
+        );
+    if (!esAlfabetico(orden)) {
+      // Pago más reciente (fecha de pago, o de aceptación si no hay)
+      const momento = (s: SolicitudMatricula) => new Date(s.fecha_pago || s.fecha_aceptacion || 0).getTime() || 0;
+      return [...lista].sort((a, b) => momento(b) - momento(a));
+    }
+    return ordenarAlfabetico(lista, (s) => [s.apellido_alumno, s.nombre_alumno], orden);
+  }, [conPago, searchQuery, orden]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -175,14 +185,21 @@ export const ReceiptsHistoryTab: React.FC = () => {
             </div>
           )}
 
-          <div className="relative w-full lg:w-72 lg:ml-auto">
-            <Search className="w-4 h-4 text-[#667085] dark:text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por trámite, alumno, recibo o taller..."
-              className="w-full pl-9 pr-3 py-2.5 sm:py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-xs text-[#172033] dark:text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
+          <div className="flex items-center gap-2 w-full lg:w-auto lg:ml-auto">
+            <div className="relative flex-1 lg:flex-none lg:w-72">
+              <Search className="w-4 h-4 text-[#667085] dark:text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por trámite, alumno, recibo o taller..."
+                className="w-full pl-9 pr-3 py-2.5 sm:py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-xs text-[#172033] dark:text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
+              />
+            </div>
+            <OrdenSelector
+              value={orden}
+              onChange={setOrden}
+              extra={[{ value: 'RECIENTES', label: 'Pago más reciente' }]}
             />
           </div>
         </div>

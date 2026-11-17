@@ -8,6 +8,8 @@ import {
   ordenarPorFechaHora,
   puedePasarLista,
 } from './attendanceStatus.shared';
+import { compararTexto, esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 
 interface AttendanceWorkshopListProps {
   /** Sesiones del período, ya filtradas por docente, estado y búsqueda */
@@ -44,6 +46,7 @@ const colorCumplimiento = (pct: number) => (pct >= 90 ? 'bg-emerald-500' : pct >
 
 export const AttendanceWorkshopList: React.FC<AttendanceWorkshopListProps> = ({ filas, hoyStr, onPasarLista }) => {
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
+  const [orden, setOrden] = useState<Orden>('AZ');
 
   const talleres = useMemo<ResumenTaller[]>(() => {
     const porGrupo = new Map<string, FilaEstatus[]>();
@@ -78,6 +81,8 @@ export const AttendanceWorkshopList: React.FC<AttendanceWorkshopListProps> = ({ 
       };
     });
 
+    if (esAlfabetico(orden)) return ordenarAlfabetico(lista, (t) => [t.fila.grupo.nombre], orden);
+
     // Más atrasados primero; los que solo tienen clases programadas, al final
     return lista.sort((a, b) => {
       const atrasoA = a.pendiente + a.parcial;
@@ -86,9 +91,9 @@ export const AttendanceWorkshopList: React.FC<AttendanceWorkshopListProps> = ({ 
       const cumpA = a.cumplimiento ?? 101;
       const cumpB = b.cumplimiento ?? 101;
       if (cumpA !== cumpB) return cumpA - cumpB;
-      return a.fila.grupo.nombre.localeCompare(b.fila.grupo.nombre);
+      return compararTexto(a.fila.grupo.nombre, b.fila.grupo.nombre);
     });
-  }, [filas]);
+  }, [filas, orden]);
 
   const alternar = (id: string) =>
     setAbiertos((prev) => {
@@ -124,6 +129,17 @@ export const AttendanceWorkshopList: React.FC<AttendanceWorkshopListProps> = ({ 
 
   return (
     <div>
+      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-[#E7EAF0] dark:border-[#2B3442]">
+        <span className="text-[11px] text-[#667085] dark:text-[#94A3B8]">
+          {talleres.length} taller{talleres.length === 1 ? '' : 'es'}
+        </span>
+        <OrdenSelector
+          value={orden}
+          onChange={setOrden}
+          extra={[{ value: 'ATRASADOS', label: 'Más atrasados' }]}
+        />
+      </div>
+
       {/* Encabezado de columnas */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-[#F7F8FA] dark:bg-[#151A22] border-b border-[#E7EAF0] dark:border-[#2B3442] text-xs font-semibold text-[#667085] dark:text-[#94A3B8]">
         <button

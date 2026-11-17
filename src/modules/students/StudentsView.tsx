@@ -23,6 +23,8 @@ import {
 import { AnecdotarioModal } from './AnecdotarioModal';
 import { arancelDeGrupo } from '../../utils/arancel';
 import { gradosDisponibles } from '../../utils/grados';
+import { ordenarAlfabetico, type Orden } from '../../utils/orden';
+import { OrdenSelector } from '../../components/OrdenSelector';
 import {
   Estudiante,
   Grupo,
@@ -54,6 +56,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [tutores, setTutores] = useState<Tutor[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orden, setOrden] = useState<Orden>('AZ');
   const [filterTab, setFilterTab] = useState<StudentFilterTab>('TODOS');
   // All new student matriculas must sign a formal contract via the wizard
   const [isEnrollmentWizardOpen, setIsEnrollmentWizardOpen] = useState(openNewModalInitially);
@@ -368,7 +371,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   };
 
   const filteredEstudiantes = useMemo(() => {
-    return estudiantes.filter((est) => {
+    const filtrados = estudiantes.filter((est) => {
       const q = searchQuery.toLowerCase();
       const tutor = tutores.find((t) => t.id === est.tutor_id);
       const matchesSearch =
@@ -400,7 +403,8 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
       return true;
     });
-  }, [estudiantes, tutores, searchQuery, filterTab, alertas]);
+    return ordenarAlfabetico(filtrados, (e) => [e.apellido, e.nombre], orden === 'ZA' ? 'ZA' : 'AZ');
+  }, [estudiantes, tutores, searchQuery, filterTab, alertas, orden]);
 
   const pendingCashierCount = solicitudes.filter((s) => s.estado === 'PENDIENTE_CAJA').length;
 
@@ -470,15 +474,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative w-full md:w-80">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar estudiante, matrícula o tutor..."
-            className="w-full pl-8.5 pr-3 py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:flex-none md:w-80">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar estudiante, matrícula o tutor..."
+              className="w-full pl-8.5 pr-3 py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+          <OrdenSelector value={orden} onChange={setOrden} />
         </div>
 
         {/* Status Segmented Filter */}
