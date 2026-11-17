@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 - `npm install` / `npm ci`: `.npmrc` sets `legacy-peer-deps=true` because of a pre-existing esbuild/vite peer conflict (needed by the Cloudflare Pages build too). npm is the only package manager (`package-lock.json`; the old `bun.lock` was removed so Cloudflare does not pick bun).
-- **Deploy**: Cloudflare Pages connected to GitHub (push to `main` publishes). Build `npm run build`, output `dist`, env vars `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `NODE_VERSION=22`. Steps and post-deploy settings (Supabase Site URL, `ALLOWED_ORIGINS`, Firebase authorized domains) are in `cloudflare/README.md`. **Status: in progress.**
+- **Deploy**: Cloudflare Pages connected to GitHub (push to `main` publishes). Build `npm run build`, output `dist`, env vars `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `NODE_VERSION=22`. Steps and post-deploy settings (Supabase Site URL, `ALLOWED_ORIGINS`, Firebase authorized domains) are in `cloudflare/README.md`. **Status: live at https://culturacca.pages.dev** (first deploy 2026-11-17; headers verified; bundle rebuilt with the `VITE_*` vars, which only take effect after a redeploy). `ALLOWED_ORIGINS` is set (verified: preflight from the Pages origin echoes it, a foreign origin gets no `Access-Control-Allow-Origin`) and the Supabase Site URL points to Pages; login, hydration and user creation returned 200 from production. Pending: Firebase/Google OAuth authorized domain, keep-alive Worker.
 - Requires `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see `.env.example`); without it the app shows a "Falta configurar Supabase" screen.
 - `npm run dev`: Vite dev server on port 3000, bound to `0.0.0.0`
 - `npm run build` / `npm run preview`
@@ -182,7 +182,7 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 - `style-src` needs `'unsafe-inline'` because of React `style={}`. Scripts must stay external: the build has no inline scripts and no `eval` or `new Function`. **Any new external service, or a change of Supabase or Firebase project, must be added to the CSP**, or the browser blocks it.
 - `vite.config.ts` parses the `/*` block (`cabecerasDePreview`) into `preview.headers`, so `npm run build && npm run preview` reproduces the production CSP. It drops HSTS and `upgrade-insecure-requests` on http localhost.
 - The dev server (`npm run dev`) sends no CSP, because HMR would break.
-- The `admin-usuarios` Edge Function (version 3) builds its CORS headers per request through `corsPara()`, a wrapper around `manejar()`.
+- The `admin-usuarios` Edge Function (version 3) builds its CORS headers per request through `corsPara()`, a wrapper around `manejar()`. `ALLOWED_ORIGINS` is set to `https://culturacca.pages.dev,http://localhost:3000,http://localhost:4173`; add any new domain there.
   - It allows the origins listed in the secret `ALLOWED_ORIGINS` (comma-separated), with `Vary: Origin`.
   - While that secret is unset it answers `*`, as before.
   - Once the Pages domain exists, set it with `create_edge_function_secret`, adding `http://localhost:3000` and `http://localhost:4173` for local testing.

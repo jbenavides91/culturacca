@@ -26,7 +26,7 @@ El proyecto de Pages es independiente de cualquier otra app que ya exista en la 
 
    Nunca la service-role key. Las `VITE_*` se incrustan en el bundle durante el build, así que
    si cambian hay que volver a desplegar (Deployments → Retry deployment).
-5. Nombre del proyecto, p. ej. `cultura-cca` → URL `https://cultura-cca.pages.dev`.
+5. Nombre del proyecto, en uso: `culturacca` → URL `https://culturacca.pages.dev`.
 6. **Save and Deploy**. El `.npmrc` del repo (`legacy-peer-deps=true`) permite que `npm ci` funcione.
 7. (Recomendado, el repo es público) Settings → Builds → **Preview deployments**: desactivarlos o
    limitarlos a ramas concretas.
@@ -35,15 +35,13 @@ Las cabeceras de seguridad y caché salen de `public/_headers` (Vite lo copia a 
 
 ## 2. Ajustes después del primer deploy
 
-Sustituye `https://cultura-cca.pages.dev` por la URL real.
-
 - **Supabase** → Authentication → URL Configuration: *Site URL* = la URL de Pages; agrégala también
   en *Redirect URLs*.
 - **Edge Function `admin-usuarios`** (CORS): secreto
-  `ALLOWED_ORIGINS=https://cultura-cca.pages.dev,http://localhost:3000,http://localhost:4173`
+  `ALLOWED_ORIGINS=https://culturacca.pages.dev,http://localhost:3000,http://localhost:4173`
   (dashboard de Supabase → Edge Functions → Secrets, o MCP `create_edge_function_secret`).
 - **Firebase** (login de Google para Gmail/Calendar): Authentication → Settings → *Authorized domains*
-  → agregar `cultura-cca.pages.dev`. En Google Cloud Console → APIs & Services → Credentials → cliente
+  → agregar `culturacca.pages.dev`. En Google Cloud Console → APIs & Services → Credentials → cliente
   OAuth web → *Authorized JavaScript origins* → agregar la URL.
 - **CSP**: no cambia mientras se usen los mismos proyectos de Supabase y Firebase.
 - **Keep-alive**: desplegar el Worker de `keepalive/` siguiendo su README.
