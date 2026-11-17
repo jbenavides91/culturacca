@@ -11,6 +11,9 @@ import {
   Banknote,
   Trash2,
   AlertTriangle,
+  LayoutGrid,
+  List,
+  Search,
 } from 'lucide-react';
 import { Grupo, Perfil, Salon } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -18,6 +21,38 @@ import { EnrollStudentsModal } from './EnrollStudentsModal';
 import { SalonSelect } from './SalonSelect';
 import { VistaPreviaSesiones, contarSesionesPrevistas } from './VistaPreviaSesiones';
 import { arancelDeGrupo, arancelGeneral, etiquetaPeriodo, formatearMonto } from '../../utils/arancel';
+
+type VistaTalleres = 'tarjetas' | 'lista';
+const CLAVE_VISTA_TALLERES = 'cca_talleres_vista';
+
+function leerVistaGuardada(): VistaTalleres {
+  try {
+    return localStorage.getItem(CLAVE_VISTA_TALLERES) === 'lista' ? 'lista' : 'tarjetas';
+  } catch {
+    return 'tarjetas';
+  }
+}
+
+/** Minúsculas y sin tildes, para comparar búsquedas */
+const normalizar = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+const DIAS_COMPLETOS: Record<number, string> = {
+  1: 'Lunes',
+  2: 'Martes',
+  3: 'Miércoles',
+  4: 'Jueves',
+  5: 'Viernes',
+  6: 'Sábado',
+  7: 'Domingo',
+};
+
+/** Barra fina de avance (sesiones cerradas / total) */
+const BarraAvance: React.FC<{ pct: number }> = ({ pct }) => (
+  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+    <div className="bg-indigo-600 dark:bg-indigo-400 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+  </div>
+);
 
 interface WorkshopsViewProps {
   currentProfile: Perfil;
@@ -37,6 +72,17 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [enrollModalGrupo, setEnrollModalGrupo] = useState<Grupo | null>(null);
   const [isNewlyCreatedEnroll, setIsNewlyCreatedEnroll] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [vista, setVista] = useState<VistaTalleres>(leerVistaGuardada);
+  const [busqueda, setBusqueda] = useState('');
+
+  const cambiarVista = (v: VistaTalleres) => {
+    setVista(v);
+    try {
+      localStorage.setItem(CLAVE_VISTA_TALLERES, v);
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  };
 
   // Edit Workshop state
   const [editingGrupo, setEditingGrupo] = useState<Grupo | null>(null);
@@ -240,6 +286,101 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
     7: 'Dom',
   };
 
+  const diasTexto = (g: Grupo) => g.dias_semana.map((d) => DIAS_LABELS[d] || d).join(', ');
+
+  // --- Búsqueda (sin distinguir mayúsculas ni tildes; deben aparecer todas las palabras) ---
+  const gruposDelRol =
+    currentProfile.rol === 'PROFESOR' ? grupos.filter((g) => g.profesor_id === currentProfile.id) : grupos;
+  const terminos = normalizar(busqueda).split(/\s+/).filter(Boolean);
+  const textoBuscable = (g: Grupo) => {
+    const prof = perfiles.find((p) => p.id === g.profesor_id);
+    return normalizar(
+      [
+        g.nombre,
+        prof ? `${prof.nombre} ${prof.apellido}` : '',
+        g.aula || 'Taller Principal',
+        `${g.hora_inicio} ${g.hora_fin}`,
+        diasTexto(g),
+        g.dias_semana.map((d) => DIAS_COMPLETOS[d] || '').join(' '),
+      ].join(' ')
+    );
+  };
+  const visibleGrupos =
+    terminos.length === 0
+      ? gruposDelRol
+      : gruposDelRol.filter((g) => {
+          const texto = textoBuscable(g);
+          return terminos.every((t) => texto.includes(t));
+        });
+
+  /** Datos derivados de un taller, compartidos por las vistas de tarjetas y de lista */
+  const datosTaller = (g: Grupo) => {
+    const sesiones = storageService.getSesionesByGrupo(g.id);
+    const closedCount = sesiones.filter((s) => s.cerrada).length;
+    return {
+      prof: perfiles.find((p) => p.id === g.profesor_id),
+      sesiones,
+      estudiantes: storageService.getEstudiantesByGrupo(g.id),
+      closedCount,
+      pct: sesiones.length > 0 ? (closedCount / sesiones.length) * 100 : 0,
+    };
+  };
+
+  const abrirAlumnos = (g: Grupo) => {
+    setEnrollModalGrupo(g);
+    setIsNewlyCreatedEnroll(false);
+  };
+
+  /** Botones de acción de un taller; `compacto` (vista de lista) los muestra solo con icono */
+  const renderAcciones = (g: Grupo, compacto: boolean) => {
+    const base = compacto
+      ? 'p-2 rounded-lg transition-colors cursor-pointer'
+      : 'px-2.5 py-1 text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-medium';
+    return (
+      <>
+        {currentProfile.rol === 'ADMIN' && (
+          <div className={`flex flex-wrap items-center ${compacto ? 'gap-0.5' : 'gap-1 sm:gap-1.5'}`}>
+            <button
+              onClick={() => handleOpenEditModal(g)}
+              className={`${base} text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800`}
+              title="Editar taller"
+              aria-label={`Editar taller ${g.nombre}`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {!compacto && <span>Editar</span>}
+            </button>
+            <button
+              onClick={() => handleOpenDeleteModal(g)}
+              className={`${base} text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50/60 dark:hover:bg-rose-950/30`}
+              title="Eliminar taller"
+              aria-label={`Eliminar taller ${g.nombre}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {!compacto && <span>Eliminar</span>}
+            </button>
+            <button
+              onClick={() => abrirAlumnos(g)}
+              className={`${base} text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30`}
+              title="Vincular o modificar alumnos"
+              aria-label={`Alumnos del taller ${g.nombre}`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              {!compacto && <span>Alumnos</span>}
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={() => onSelectWorkshopForRollCall(g.id)}
+          className="px-3 py-1 bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0 ml-auto"
+        >
+          <span>Asistencia</span>
+          <ExternalLink className="w-3 h-3" />
+        </button>
+      </>
+    );
+  };
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Toast Notice */}
@@ -265,25 +406,101 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
           </p>
         </div>
 
-        {currentProfile.rol === 'ADMIN' && (
-          <button
-            onClick={() => {
-              if (docentes.length > 0) setProfesorId(docentes[0].id);
-              setIsModalOpen(true);
-            }}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center space-x-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+          {/* Selector de vista */}
+          <div
+            className="flex items-center p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23]"
+            role="group"
+            aria-label="Tipo de vista"
           >
-            <Plus className="w-4 h-4" />
-            <span>Nuevo Taller</span>
-          </button>
-        )}
+            {([
+              { id: 'tarjetas', label: 'Tarjetas', Icon: LayoutGrid },
+              { id: 'lista', label: 'Lista', Icon: List },
+            ] as const).map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => cambiarVista(id)}
+                aria-pressed={vista === id}
+                title={`Vista de ${label.toLowerCase()}`}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  vista === id
+                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {currentProfile.rol === 'ADMIN' && (
+            <button
+              onClick={() => {
+                if (docentes.length > 0) setProfesorId(docentes[0].id);
+                setIsModalOpen(true);
+              }}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center space-x-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nuevo Taller</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Barra de búsqueda */}
+      {gruposDelRol.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+          <div className="relative w-full md:w-80">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar taller, docente, salón, día u hora..."
+              aria-label="Buscar talleres"
+              className="w-full pl-8.5 pr-8 py-1.5 bg-white dark:bg-[#141A23] border border-slate-200/80 dark:border-slate-800/80 rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {busqueda && (
+              <button
+                type="button"
+                onClick={() => setBusqueda('')}
+                title="Limpiar búsqueda"
+                aria-label="Limpiar búsqueda"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {terminos.length > 0
+              ? `${visibleGrupos.length} de ${gruposDelRol.length} talleres`
+              : `${gruposDelRol.length} taller${gruposDelRol.length === 1 ? '' : 'es'}`}
+          </p>
+        </div>
+      )}
 
       {/* Workshop Grid */}
       {(() => {
-        const visibleGrupos = currentProfile.rol === 'PROFESOR'
-          ? grupos.filter((g) => g.profesor_id === currentProfile.id)
-          : grupos;
+        if (gruposDelRol.length > 0 && visibleGrupos.length === 0) {
+          return (
+            <div className="text-center py-12 bg-white dark:bg-[#141A23] rounded-xl border border-slate-200/80 dark:border-slate-800/80 p-5 sm:p-8 space-y-3">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Ningún taller coincide con «{busqueda.trim()}»
+              </p>
+              <button
+                type="button"
+                onClick={() => setBusqueda('')}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                Limpiar búsqueda
+              </button>
+            </div>
+          );
+        }
 
         if (visibleGrupos.length === 0) {
           return (
@@ -298,13 +515,121 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
           );
         }
 
+        if (vista === 'lista') {
+          return (
+            <div className="bg-white dark:bg-[#141A23] rounded-xl border border-slate-200/80 dark:border-slate-800/80 overflow-hidden">
+              {/* Tabla (md en adelante) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
+                      <th className="px-4 py-2.5 font-medium">Taller</th>
+                      <th className="px-3 py-2.5 font-medium">Horario</th>
+                      <th className="px-3 py-2.5 font-medium">Salón</th>
+                      <th className="px-3 py-2.5 font-medium">Arancel</th>
+                      <th className="px-3 py-2.5 font-medium">Alumnos</th>
+                      <th className="px-3 py-2.5 font-medium w-36">Avance</th>
+                      <th className="px-4 py-2.5 font-medium text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {visibleGrupos.map((grupo) => {
+                      const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
+                      return (
+                        <tr key={grupo.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-slate-900 dark:text-white">{grupo.nombre}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {prof ? `${prof.nombre} ${prof.apellido}` : 'Docente titular'}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <p className="font-medium text-slate-800 dark:text-slate-200">
+                              {grupo.hora_inicio} - {grupo.hora_fin}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {diasTexto(grupo)}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3 text-slate-600 dark:text-slate-300">
+                            {grupo.aula || 'Taller Principal'}
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                            {formatearMonto(arancelDeGrupo(grupo))}
+                            {!(Number(grupo.costo) > 0) && <span className="text-slate-400"> (general)</span>}
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <strong className="font-medium text-slate-900 dark:text-white">{estudiantes.length}</strong>
+                            {currentProfile.rol === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={() => abrirAlumnos(grupo)}
+                                className="ml-1.5 text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                              >
+                                Gestionar
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            <BarraAvance pct={pct} />
+                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-1">
+                              {closedCount}/{sesiones.length} sesiones
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">{renderAcciones(grupo, true)}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Filas compactas (móvil) */}
+              <ul className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/80">
+                {visibleGrupos.map((grupo) => {
+                  const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
+                  return (
+                    <li key={grupo.id} className="p-3 space-y-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{grupo.nombre}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {prof ? `${prof.nombre} ${prof.apellido}` : 'Docente titular'} · {grupo.aula || 'Taller Principal'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {grupo.hora_inicio} - {grupo.hora_fin}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="truncate">{diasTexto(grupo)}</span>
+                        <span aria-hidden="true">·</span>
+                        <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{estudiantes.length}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <BarraAvance pct={pct} />
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                          {closedCount}/{sesiones.length}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-1">{renderAcciones(grupo, true)}</div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        }
+
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {visibleGrupos.map((grupo) => {
-              const prof = perfiles.find((p) => p.id === grupo.profesor_id);
-              const sesiones = storageService.getSesionesByGrupo(grupo.id);
-              const estudiantes = storageService.getEstudiantesByGrupo(grupo.id);
-              const closedCount = sesiones.filter((s) => s.cerrada).length;
+              const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
 
               return (
                 <div
@@ -330,9 +655,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                       {grupo.hora_inicio} - {grupo.hora_fin}
                     </span>
                     <span aria-hidden="true">·</span>
-                    <span>
-                      {grupo.dias_semana.map((d) => DIAS_LABELS[d] || d).join(', ')}
-                    </span>
+                    <span>{diasTexto(grupo)}</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -358,10 +681,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                         <span aria-hidden="true">·</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            setEnrollModalGrupo(grupo);
-                            setIsNewlyCreatedEnroll(false);
-                          }}
+                          onClick={() => abrirAlumnos(grupo)}
                           className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                         >
                           Gestionar
@@ -379,61 +699,14 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                       {closedCount} de {sesiones.length} sesiones
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
-                    <div
-                      className="bg-indigo-600 dark:bg-indigo-400 h-full rounded-full transition-all"
-                      style={{
-                        width: `${sesiones.length > 0 ? (closedCount / sesiones.length) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
+                  <BarraAvance pct={pct} />
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="px-3 sm:px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-                  {currentProfile.rol === 'ADMIN' && (
-                    <>
-                      <button
-                        onClick={() => handleOpenEditModal(grupo)}
-                        className="px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-medium"
-                        title="Editar taller"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Editar</span>
-                      </button>
-                      <button
-                        onClick={() => handleOpenDeleteModal(grupo)}
-                        className="px-2.5 py-1 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50/60 dark:hover:bg-rose-950/30 rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-medium"
-                        title="Eliminar taller"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Eliminar</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEnrollModalGrupo(grupo);
-                          setIsNewlyCreatedEnroll(false);
-                        }}
-                        className="px-2.5 py-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-medium"
-                        title="Vincular o modificar alumnos"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Alumnos</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => onSelectWorkshopForRollCall(grupo.id)}
-                  className="px-3 py-1 bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Asistencia</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
-                </div>
+                {renderAcciones(grupo, false)}
+              </div>
               </div>
             );
             })}
