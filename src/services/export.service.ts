@@ -3,6 +3,7 @@ import { AlertaEstudiante, Asistencia, Estudiante, Grupo, Sesion } from '../type
 import { storageService } from './storage.service';
 import { cicloActual, nombreInstitucion } from '../utils/institucion';
 import { fechaLocalISO } from '../utils/fechas';
+import { ordenarAlfabetico } from '../utils/orden';
 
 /** Fila ya formateada del historial del anecdotario para exportar */
 export interface FilaAnecdotarioExport {
@@ -18,6 +19,19 @@ export interface FilaAnecdotarioExport {
 /** dias_semana: 1 = Lunes … 7 = Domingo */
 const DIAS_CORTOS: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
 
+/** Hoja con encabezado en la primera fila, autofiltro y anchos de columna */
+const hojaTabla = (encabezado: string[], filas: (string | number)[][], anchos: number[]) => {
+  const ws = XLSX.utils.aoa_to_sheet([encabezado, ...filas]);
+  ws['!cols'] = anchos.map((wch) => ({ wch }));
+  ws['!autofilter'] = {
+    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(filas.length, 1), c: encabezado.length - 1 } }),
+  };
+  return ws;
+};
+
+const gradoDe = (est?: Estudiante) => est?.grado || 'Sin grado';
+const aulaDe = (est?: Estudiante) => est?.aula_regular || 'Sin aula';
+
 export class ExportService {
   /**
    * Genera y descarga un libro de Excel (.xlsx) estructurado
@@ -26,7 +40,9 @@ export class ExportService {
     const grupo = storageService.getGrupoById(grupoId);
     if (!grupo) return;
 
-    const estudiantes = storageService.getEstudiantesByGrupo(grupoId);
+    // Por apellido y nombre, igual que en pantalla
+    const estudiantes = ordenarAlfabetico(storageService.getEstudiantesByGrupo(grupoId), (e) => [e.apellido, e.nombre]);
+    const estudiantePorId = new Map(storageService.getEstudiantes().map((e) => [e.id, e]));
     const sesiones = storageService.getSesionesByGrupo(grupoId);
     const asistencias = storageService.getAsistencias();
     const alertas = storageService.calcularAlertasEstudiantes(grupoId);
@@ -38,7 +54,7 @@ export class ExportService {
       ['REPORTE OFICIAL DE ASISTENCIA Y CONTROL ACADÉMICO'],
       [''],
       ['Taller / Curso:', grupo.nombre],
-      ['Aula:', grupo.aula || 'Taller Principal'],
+      ['Salón del taller:', grupo.aula || 'Taller Principal'],
       ['Horario:', `${grupo.hora_inicio} - ${grupo.hora_fin}`],
       ['Ciclo Académico:', config.ciclo_academico_actual],
       ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
@@ -54,13 +70,15 @@ export class ExportService {
 
     // 2. Hoja: Matriz de Asistencia
     const fechas = sesiones.map((s) => `${s.fecha} (${s.cerrada ? 'Cerrada' : 'Pendiente'})`);
-    const headerRow = ['Matrícula', 'Estudiante', 'Tutor', 'Teléfono Tutor', ...fechas, 'Total Asistencias', 'Total Faltas', 'Total Justificadas', '% Inasistencia', 'Estatus Alerta'];
+    const headerRow = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor', 'Teléfono Tutor', ...fechas, 'Total Asistencias', 'Total Faltas', 'Total Justificadas', '% Inasistencia', 'Estatus Alerta'];
 
     const matrixRows = estudiantes.map((est) => {
       const tutor = storageService.getTutorById(est.tutor_id);
       const row: (string | number)[] = [
         est.matricula,
         `${est.nombre} ${est.apellido}`,
+        gradoDe(est),
+        aulaDe(est),
         tutor?.nombre || 'N/A',
         tutor?.telefono || 'N/A',
       ];
@@ -97,13 +115,19 @@ export class ExportService {
       return row;
     });
 
-    const wsMatrix = XLSX.utils.aoa_to_sheet([headerRow, ...matrixRows]);
+    const wsMatrix = hojaTabla(headerRow, matrixRows, [
+      14, 28, 12, 12, 24, 14,
+      ...fechas.map(() => 20),
+      16, 12, 16, 14, 14,
+    ]);
 
     // 3. Hoja: Alertas y Casos Críticos
-    const headerAlerts = ['Matrícula', 'Estudiante', 'Tutor Responsable', 'Correo Tutor', 'Faltas Acumuladas', '% Inasistencia', 'Nivel de Alerta', 'Acción Requerida'];
+    const headerAlerts = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor Responsable', 'Correo Tutor', 'Faltas Acumuladas', '% Inasistencia', 'Nivel de Alerta', 'Acción Requerida'];
     const alertRows = alertas.map((a) => [
       a.matricula,
       a.estudiante_nombre,
+      gradoDe(estudiantePorId.get(a.estudiante_id)),
+      aulaDe(estudiantePorId.get(a.estudiante_id)),
       a.tutor_nombre,
       a.tutor_email,
       a.total_ausencias,
@@ -115,7 +139,7 @@ export class ExportService {
         ? 'Aviso preventivo enviado a tutor'
         : 'Regular',
     ]);
-    const wsAlerts = XLSX.utils.aoa_to_sheet([headerAlerts, ...alertRows]);
+    const wsAlerts = hojaTabla(headerAlerts, alertRows, [14, 28, 12, 12, 26, 28, 16, 14, 14, 44]);
 
     // Crear libro y agregar hojas
     const wb = XLSX.utils.book_new();
@@ -168,15 +192,6 @@ export class ExportService {
         ? 'Aviso preventivo enviado a tutor'
         : 'Regular';
 
-    /** Hoja con encabezado en la primera fila, autofiltro y anchos de columna */
-    const hojaTabla = (encabezado: string[], filas: (string | number)[][], anchos: number[]) => {
-      const ws = XLSX.utils.aoa_to_sheet([encabezado, ...filas]);
-      ws['!cols'] = anchos.map((wch) => ({ wch }));
-      ws['!autofilter'] = {
-        ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(filas.length, 1), c: encabezado.length - 1 } }),
-      };
-      return ws;
-    };
 
     // Datos por taller
     const porTaller = grupos.map((g) => {
