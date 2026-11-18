@@ -355,104 +355,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 sm:pb-4 border-b border-slate-200/80 dark:border-slate-800">
-        <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Configuración del Sistema
-          </h1>
-          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Administración de cuentas de usuario, roles, reglas institucionales, salones, grados, días no lectivos, cortes bimestrales y contrato de matrícula.
-          </p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="inline-flex flex-wrap gap-0.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('usuarios')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'usuarios'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Usuarios y Roles</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('reglas')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'reglas'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Reglas y Parámetros</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('salones')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'salones'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <DoorOpen className="w-3.5 h-3.5" />
-            <span>Salones</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('grados')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'grados'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Grados</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('dias')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'dias'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <CalendarOff className="w-3.5 h-3.5" />
-            <span>Días no lectivos</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('cortes')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'cortes'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <CalendarRange className="w-3.5 h-3.5" />
-            <span>Cortes</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('contrato')}
-            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'contrato'
-                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <FileSignature className="w-3.5 h-3.5" />
-            <span>Contrato</span>
-          </button>
-        </div>
+      <div className="pb-3 sm:pb-4 border-b border-slate-200/80 dark:border-slate-800">
+        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Configuración del Sistema
+        </h1>
       </div>
+
+      {/* Selector de pestañas: una sola fila; en pantallas angostas se desliza horizontalmente */}
+      <nav aria-label="Secciones de configuración" className="-mx-3 sm:mx-0 overflow-x-auto">
+        <div
+          role="tablist"
+          className="flex w-max sm:w-auto min-w-full gap-1 p-1 mx-3 sm:mx-0 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs"
+        >
+          {(
+            [
+              { id: 'usuarios', label: 'Usuarios y Roles', icono: Users },
+              { id: 'reglas', label: 'Reglas y Parámetros', icono: Sliders },
+              { id: 'salones', label: 'Salones', icono: DoorOpen },
+              { id: 'grados', label: 'Grados', icono: GraduationCap },
+              { id: 'dias', label: 'Días no lectivos', icono: CalendarOff },
+              { id: 'cortes', label: 'Cortes', icono: CalendarRange },
+              { id: 'contrato', label: 'Contrato', icono: FileSignature },
+            ] as { id: SettingsTab; label: string; icono: typeof Users }[]
+          ).map(({ id, label, icono: Icono }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === id}
+              onClick={() => setActiveTab(id)}
+              className={`flex-1 sm:flex-none min-h-9 px-3 sm:px-3.5 py-1.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                activeTab === id
+                  ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Icono className="w-3.5 h-3.5 shrink-0" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
 
       {/* TAB 1: USUARIOS Y ROLES */}
       {activeTab === 'usuarios' && (
