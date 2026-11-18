@@ -194,14 +194,18 @@ class StorageService {
    * Crea un grupo y genera automáticamente las sesiones para las fechas del ciclo
    */
   crearGrupoConSesiones(
-    grupoData: Omit<Grupo, 'id' | 'creado_en'>
+    grupoData: Omit<Grupo, 'id' | 'creado_en' | 'fecha_inicio_ciclo' | 'fecha_fin_ciclo'>
   ): { grupo: Grupo; sesionesGeneradas: number } {
+    const creado_en = new Date().toISOString();
     const nuevoGrupo: Grupo = {
       ...grupoData,
+      // Fechas derivadas de los cortes (las columnas son NOT NULL); el calendario lo definen los cortes
+      ...this.rangoCalendario({ creado_en }),
       id: `grp-${nuevoId()}`,
-      creado_en: new Date().toISOString(),
+      creado_en,
     };
 
+    this.asegurarCalendarioDeTaller(nuevoGrupo);
     this.verificarChoqueSalon(nuevoGrupo);
     this.verificarChoqueDocente(nuevoGrupo);
 
@@ -240,19 +244,13 @@ class StorageService {
     const updatedGrupo: Grupo = {
       ...anterior,
       ...data,
+      // Las fechas no se editan: se derivan de los cortes y de la creación del taller
+      ...this.rangoCalendario(anterior),
       id,
+      creado_en: anterior.creado_en,
     };
 
-    if (!updatedGrupo.fecha_inicio_ciclo || !updatedGrupo.fecha_fin_ciclo) {
-      throw new Error('Indica la fecha de inicio y de fin del taller.');
-    }
-    if (updatedGrupo.fecha_fin_ciclo < updatedGrupo.fecha_inicio_ciclo) {
-      throw new Error('La fecha de fin del taller no puede ser anterior a la fecha de inicio.');
-    }
-    if ((updatedGrupo.dias_semana || []).length === 0) {
-      throw new Error('Selecciona al menos un día de clase.');
-    }
-
+    this.asegurarCalendarioDeTaller(updatedGrupo);
     this.verificarChoqueSalon(updatedGrupo);
     this.verificarChoqueDocente(updatedGrupo);
 
@@ -349,39 +347,76 @@ class StorageService {
     };
   }
 
-  /** Fechas (YYYY-MM-DD) en que el taller tiene clase según su ciclo y días de la semana */
-  private generarFechasSesiones(grupo: Grupo): string[] {
+  /** Fecha local (YYYY-MM-DD) en que se creó el taller; hoy si aún no existe */
+  private fechaCreacionDe(grupo: Pick<Grupo, 'creado_en'> | { creado_en?: string }): string {
+    const d = grupo.creado_en ? new Date(grupo.creado_en) : null;
+    return d && !Number.isNaN(d.getTime()) ? fechaLocalISO(d) : fechaLocalISO();
+  }
+
+  /**
+   * Fechas (YYYY-MM-DD) en que el taller tiene clase: los días de la semana del taller dentro
+   * de los cortes (Configuración → Cortes), desde la fecha de creación del taller, sin días no lectivos.
+   * Todos los talleres comparten el calendario de cortes.
+   */
+  private generarFechasSesiones(grupo: Pick<Grupo, 'dias_semana'> & { creado_en?: string }): string[] {
     // Aritmética 100% UTC: el día de la semana y la fecha guardada salen del mismo calendario,
     // sin importar la zona horaria del equipo (antes, en UTC-6 los lunes quedaban como martes).
     const aUTC = (iso: string) => {
       const [y, m, d] = iso.split('-').map(Number);
       return new Date(Date.UTC(y, m - 1, d));
     };
-    const fechas: string[] = [];
-    const fin = aUTC(grupo.fecha_fin_ciclo);
-    const cursor = aUTC(grupo.fecha_inicio_ciclo);
+    const desde = this.fechaCreacionDe(grupo);
     const noLectivos = this.getDiasNoLectivos();
-    while (cursor <= fin) {
-      // getUTCDay: 0=Domingo ... 6=Sábado → 1=Lunes ... 7=Domingo
-      const dayOfWeek = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay();
-      const fecha = cursor.toISOString().slice(0, 10);
-      // Feriados y vacaciones (Configuración → Días no lectivos) no generan clase
-      if (grupo.dias_semana.includes(dayOfWeek) && !this.diaNoLectivoEn(noLectivos, fecha)) {
-        fechas.push(fecha);
+    const fechas: string[] = [];
+    for (const corte of this.getCortes()) {
+      if (corte.fecha_fin < desde) continue;
+      const cursor = aUTC(corte.fecha_inicio > desde ? corte.fecha_inicio : desde);
+      const fin = aUTC(corte.fecha_fin);
+      while (cursor <= fin) {
+        // getUTCDay: 0=Domingo ... 6=Sábado → 1=Lunes ... 7=Domingo
+        const dayOfWeek = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay();
+        const fecha = cursor.toISOString().slice(0, 10);
+        // Feriados y vacaciones (Configuración → Días no lectivos) no generan clase
+        if ((grupo.dias_semana || []).includes(dayOfWeek) && !this.diaNoLectivoEn(noLectivos, fecha)) {
+          fechas.push(fecha);
+        }
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
-    return fechas;
+    return Array.from(new Set(fechas)).sort();
   }
 
-  /** Vista previa del calendario (para formularios): fechas que tendría el taller con esos datos */
-  previsualizarSesiones(
-    grupo: Pick<Grupo, 'fecha_inicio_ciclo' | 'fecha_fin_ciclo' | 'dias_semana'>
-  ): string[] {
-    if (!grupo.fecha_inicio_ciclo || !grupo.fecha_fin_ciclo || grupo.fecha_fin_ciclo < grupo.fecha_inicio_ciclo) {
-      return [];
+  /**
+   * Fechas derivadas que se guardan en grupos.fecha_inicio_ciclo / fecha_fin_ciclo (columnas NOT NULL):
+   * desde la creación del taller (o el primer corte, si es posterior) hasta el fin del último corte.
+   */
+  rangoCalendario(grupo: { creado_en?: string }): { fecha_inicio_ciclo: string; fecha_fin_ciclo: string } {
+    const creacion = this.fechaCreacionDe(grupo);
+    const cortes = this.getCortes();
+    if (cortes.length === 0) return { fecha_inicio_ciclo: creacion, fecha_fin_ciclo: creacion };
+    const primero = cortes[0].fecha_inicio;
+    const ultimo = cortes.reduce((max, c) => (c.fecha_fin > max ? c.fecha_fin : max), cortes[0].fecha_fin);
+    const inicio = primero > creacion ? primero : creacion;
+    return { fecha_inicio_ciclo: inicio > ultimo ? ultimo : inicio, fecha_fin_ciclo: ultimo };
+  }
+
+  /** Impide guardar un taller sin cortes o que no tendría ninguna clase en ellos */
+  private asegurarCalendarioDeTaller(grupo: Pick<Grupo, 'dias_semana'> & { creado_en?: string }): void {
+    if (this.getCortes().length === 0) {
+      throw new Error('Primero registra los cortes en Configuración → Cortes: las clases de los talleres se generan a partir de ellos.');
     }
-    return this.generarFechasSesiones(grupo as Grupo);
+    if ((grupo.dias_semana || []).length === 0) {
+      throw new Error('Selecciona al menos un día de clase.');
+    }
+    if (this.generarFechasSesiones(grupo).length === 0) {
+      throw new Error('Con esos días el taller no tendría clases en los cortes registrados.');
+    }
+  }
+
+  /** Vista previa del calendario (para formularios): fechas que tendría el taller con esos días */
+  previsualizarSesiones(grupo: { dias_semana: number[]; creado_en?: string }): string[] {
+    if (!grupo.dias_semana?.length) return [];
+    return this.generarFechasSesiones(grupo);
   }
 
   /**
@@ -560,20 +595,8 @@ class StorageService {
       return { tieneConflicto: false };
     }
 
-    // 1. Rango de fechas del ciclo coinciden o se traslapan
-    const inicioA = grupoA.fecha_inicio_ciclo || '';
-    const finA = grupoA.fecha_fin_ciclo || '';
-    const inicioB = grupoB.fecha_inicio_ciclo || '';
-    const finB = grupoB.fecha_fin_ciclo || '';
-
-    if (inicioA && finA && inicioB && finB) {
-      const seTraslapanFechas = inicioA <= finB && inicioB <= finA;
-      if (!seTraslapanFechas) {
-        return { tieneConflicto: false };
-      }
-    }
-
-    // 2. Días de la semana que coinciden
+    // Todos los talleres comparten el calendario de cortes: solo importan días y horas.
+    // 1. Días de la semana que coinciden
     const diasCoincidentes = (grupoA.dias_semana || []).filter((dia) =>
       (grupoB.dias_semana || []).includes(dia)
     );
@@ -1681,15 +1704,27 @@ class StorageService {
   }
 
   /**
-   * Vuelve a calcular el calendario de todos los talleres con los días no lectivos actuales.
-   * Agrega las clases que faltan y quita las que caen en días no lectivos, salvo cerradas,
-   * con asistencia o extraordinarias (misma regla que reconciliarSesiones).
+   * Vuelve a calcular el calendario de todos los talleres con los cortes y días no lectivos actuales.
+   * Agrega las clases que faltan y quita las que quedan fuera de los cortes o caen en días no lectivos,
+   * salvo cerradas, con asistencia o extraordinarias (misma regla que reconciliarSesiones).
+   * También actualiza las fechas derivadas de cada taller (fecha_inicio_ciclo / fecha_fin_ciclo).
    */
   reaplicarCalendarioATodos(): { sesionesAgregadas: number; sesionesEliminadas: number; sesionesConservadas: number } {
     cacheService.invalidateByTag('dias_no_lectivos');
+    cacheService.invalidateByTag('cortes');
     const total = { sesionesAgregadas: 0, sesionesEliminadas: 0, sesionesConservadas: 0 };
+
+    const gruposConFechas = this.getGrupos().filter((g) => {
+      const r = this.rangoCalendario(g);
+      return String(g.fecha_inicio_ciclo).slice(0, 10) !== r.fecha_inicio_ciclo ||
+        String(g.fecha_fin_ciclo).slice(0, 10) !== r.fecha_fin_ciclo;
+    }).map((g) => ({ ...g, ...this.rangoCalendario(g) }));
+    if (gruposConFechas.length > 0) {
+      this.write(STORAGE_KEYS.GRUPOS, gruposConFechas);
+      cacheService.invalidateByTag('grupos');
+    }
+
     for (const grupo of this.getGrupos()) {
-      if (!grupo.fecha_inicio_ciclo || !grupo.fecha_fin_ciclo) continue;
       const r = this.reconciliarSesiones(grupo);
       total.sesionesAgregadas += r.sesionesAgregadas;
       total.sesionesEliminadas += r.sesionesEliminadas;
@@ -1852,7 +1887,8 @@ class StorageService {
     return { nombre, fecha_inicio: datos.fecha_inicio, fecha_fin: datos.fecha_fin };
   }
 
-  crearCorte(datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>): CorteBimestral {
+  /** Inserta un corte validado, sin recalcular el calendario */
+  private insertarCorte(datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>): CorteBimestral {
     const nuevo: CorteBimestral = {
       id: `cor-${nuevoId()}`,
       ...this.validarCorte(datos),
@@ -1860,24 +1896,30 @@ class StorageService {
     };
     this.write(STORAGE_KEYS.CORTES, [nuevo]);
     cacheService.invalidateByTag('cortes');
-    notifyDataChange();
     return nuevo;
   }
 
-  actualizarCorte(id: string, datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>): CorteBimestral {
-    const actual = this.getCortes().find((c) => c.id === id);
-    if (!actual) throw new Error('Corte no encontrado.');
-    const actualizado: CorteBimestral = { ...actual, ...this.validarCorte(datos, id), id };
-    this.write(STORAGE_KEYS.CORTES, [actualizado]);
-    cacheService.invalidateByTag('cortes');
-    notifyDataChange();
-    return actualizado;
+  /** Crea un corte y genera las clases de todos los talleres en sus fechas */
+  crearCorte(datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>) {
+    const corte = this.insertarCorte(datos);
+    return { corte, ...this.reaplicarCalendarioATodos() };
   }
 
-  eliminarCorte(id: string): void {
+  /** Cambia un corte y ajusta las clases de todos los talleres a sus nuevas fechas */
+  actualizarCorte(id: string, datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>) {
+    const actual = this.getCortes().find((c) => c.id === id);
+    if (!actual) throw new Error('Corte no encontrado.');
+    const corte: CorteBimestral = { ...actual, ...this.validarCorte(datos, id), id };
+    this.write(STORAGE_KEYS.CORTES, [corte]);
+    cacheService.invalidateByTag('cortes');
+    return { corte, ...this.reaplicarCalendarioATodos() };
+  }
+
+  /** Elimina un corte; sus clases sin asistencia, no cerradas y no extraordinarias se quitan */
+  eliminarCorte(id: string) {
     this.remove(STORAGE_KEYS.CORTES, [id]);
     cacheService.invalidateByTag('cortes');
-    notifyDataChange();
+    return this.reaplicarCalendarioATodos();
   }
 
   /** Seis bimestres de calendario de un año (Ene–Feb … Nov–Dic), para pre-llenar y editar */
@@ -1896,18 +1938,19 @@ class StorageService {
   }
 
   /** Crea los bimestres propuestos de un año, omitiendo los que se cruzan con cortes existentes */
-  crearBimestresDelAnio(anio: number): { creados: number; omitidos: number } {
+  crearBimestresDelAnio(anio: number) {
     let creados = 0;
     let omitidos = 0;
     for (const b of this.proponerBimestresDelAnio(anio)) {
       try {
-        this.crearCorte(b);
+        this.insertarCorte(b);
         creados++;
       } catch {
         omitidos++;
       }
     }
-    return { creados, omitidos };
+    // Un solo recálculo del calendario al final
+    return { creados, omitidos, ...this.reaplicarCalendarioATodos() };
   }
 
   /** Mensualidad de un taller: su costo propio o el arancel general (misma regla que utils/arancel) */

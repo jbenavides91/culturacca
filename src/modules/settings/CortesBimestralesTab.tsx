@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CalendarRange, CheckCircle2, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertCircle, CalendarRange, CheckCircle2, Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 import { CorteBimestral } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { fechaLocalISO } from '../../utils/fechas';
+import { resumenCambios } from '../../utils/calendario';
 
 /** "1 nov 2026" a partir de YYYY-MM-DD (fecha local, sin desfase de zona horaria) */
 const formatoFecha = (iso: string) => {
@@ -38,7 +39,7 @@ export const CortesBimestralesTab: React.FC = () => {
   const avisar = (texto: string) => {
     setError(null);
     setMensaje(texto);
-    setTimeout(() => setMensaje(null), 5000);
+    setTimeout(() => setMensaje(null), 8000);
   };
 
   const ejecutar = (accion: () => void) => {
@@ -59,11 +60,11 @@ export const CortesBimestralesTab: React.FC = () => {
     e.preventDefault();
     ejecutar(() => {
       if (editandoId) {
-        const c = storageService.actualizarCorte(editandoId, form);
-        avisar(`Corte "${c.nombre}" actualizado.`);
+        const r = storageService.actualizarCorte(editandoId, form);
+        avisar(`Corte "${r.corte.nombre}" actualizado.${resumenCambios(r)}`);
       } else {
-        const c = storageService.crearCorte(form);
-        avisar(`Corte "${c.nombre}" creado.`);
+        const r = storageService.crearCorte(form);
+        avisar(`Corte "${r.corte.nombre}" creado.${resumenCambios(r)}`);
       }
       cancelarEdicion();
     });
@@ -76,11 +77,16 @@ export const CortesBimestralesTab: React.FC = () => {
   };
 
   const eliminar = (c: CorteBimestral) => {
-    if (!window.confirm(`¿Eliminar el corte "${c.nombre}"? El reporte se puede volver a generar creándolo de nuevo.`)) return;
+    if (
+      !window.confirm(
+        `¿Eliminar el corte "${c.nombre}"? Se quitarán las clases de todos los talleres en esas fechas (salvo las cerradas, con asistencia o extraordinarias).`
+      )
+    )
+      return;
     ejecutar(() => {
-      storageService.eliminarCorte(c.id);
+      const r = storageService.eliminarCorte(c.id);
       if (editandoId === c.id) cancelarEdicion();
-      avisar(`Corte "${c.nombre}" eliminado.`);
+      avisar(`Corte "${c.nombre}" eliminado.${resumenCambios(r)}`);
     });
   };
 
@@ -91,9 +97,15 @@ export const CortesBimestralesTab: React.FC = () => {
         r.creados > 0
           ? `Se crearon ${r.creados} bimestre(s) de ${anioPropuesta}${
               r.omitidos > 0 ? `; ${r.omitidos} se omitieron porque se cruzan con cortes existentes` : ''
-            }. Puedes ajustar sus fechas con el lápiz.`
+            }. Puedes ajustar sus fechas con el lápiz.${resumenCambios(r)}`
           : `No se creó ningún bimestre de ${anioPropuesta}: todos se cruzan con cortes existentes.`
       );
+    });
+
+  const aplicarATalleres = () =>
+    ejecutar(() => {
+      const r = storageService.reaplicarCalendarioATodos();
+      avisar(`Cortes aplicados a todos los talleres.${resumenCambios(r)}`);
     });
 
   const inputClass =
@@ -122,7 +134,8 @@ export const CortesBimestralesTab: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold">Cortes bimestrales</h3>
             <p className="text-[11px] text-slate-300">
-              Periodos del reporte Corte bimestral (Reportes): cobro esperado, altas y bajas, y matrículas cobradas.
+              Definen el calendario de todos los talleres (sus clases se generan dentro de estas fechas) y los
+              periodos del reporte Corte bimestral.
             </p>
           </div>
         </div>
@@ -276,6 +289,23 @@ export const CortesBimestralesTab: React.FC = () => {
             })}
           </ul>
         )}
+
+        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-2">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 flex-1">
+            Al crear, editar o eliminar un corte se recalculan las clases de todos los talleres (en sus días de la semana,
+            desde la fecha en que se creó cada taller y sin días no lectivos). Las clases cerradas, con asistencia o
+            extraordinarias nunca se quitan.
+          </p>
+          <button
+            type="button"
+            onClick={aplicarATalleres}
+            className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            title="Vuelve a generar las clases de todos los talleres según los cortes y días no lectivos actuales"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Aplicar cortes a los talleres
+          </button>
+        </div>
 
         <p className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
           Los cortes no pueden cruzarse entre sí. Un mes se cobra completo si el alumno estuvo inscrito al menos un día de

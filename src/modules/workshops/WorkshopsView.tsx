@@ -97,8 +97,6 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [editAula, setEditAula] = useState('');
   const [editCosto, setEditCosto] = useState('');
   const [costo, setCosto] = useState('');
-  const [editFechaInicio, setEditFechaInicio] = useState('');
-  const [editFechaFin, setEditFechaFin] = useState('');
 
   // Delete Workshop state
   const [grupoAEliminar, setGrupoAEliminar] = useState<Grupo | null>(null);
@@ -110,8 +108,6 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [diasSemana, setDiasSemana] = useState<number[]>([1, 3]); // Lunes y Miércoles
   const [horaInicio, setHoraInicio] = useState('18:00');
   const [horaFin, setHoraFin] = useState('20:30');
-  const [fechaInicio, setFechaInicio] = useState('2026-11-01');
-  const [fechaFin, setFechaFin] = useState('2026-12-18');
   const [aula, setAula] = useState('');
 
   const loadData = () => {
@@ -132,20 +128,14 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
     setEditHoraFin(g.hora_fin);
     setEditAula(g.aula || '');
     setEditCosto(g.costo ? String(g.costo) : '');
-    setEditFechaInicio(g.fecha_inicio_ciclo || '');
-    setEditFechaFin(g.fecha_fin_ciclo || '');
   };
 
   const handleUpdateWorkshop = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGrupo || !editNombre.trim() || !editProfesorId) return;
 
-    if (editFechaFin < editFechaInicio) {
-      alert('La fecha de fin del taller no puede ser anterior a la fecha de inicio.');
-      return;
-    }
-    if (contarSesionesPrevistas(editFechaInicio, editFechaFin, editDiasSemana) === 0) {
-      alert('Con esas fechas y días el taller no tendría ninguna clase. Ajusta el rango o los días.');
+    if (contarSesionesPrevistas(editDiasSemana, editingGrupo.creado_en) === 0) {
+      alert('Con esos días el taller no tendría ninguna clase en los cortes registrados (Configuración → Cortes).');
       return;
     }
     const costoEdit = editCosto.trim() ? Number(editCosto) : undefined;
@@ -162,8 +152,6 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
         hora_inicio: editHoraInicio,
         hora_fin: editHoraFin,
         aula: editAula.trim() || 'Taller Principal',
-        fecha_inicio_ciclo: editFechaInicio,
-        fecha_fin_ciclo: editFechaFin,
         costo: costoEdit,
       });
 
@@ -233,8 +221,12 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const handleCreateWorkshop = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim() || !profesorId) return;
-    if (contarSesionesPrevistas(fechaInicio, fechaFin, diasSemana) === 0) {
-      alert('Con esas fechas y días el taller no tendría ninguna clase. Ajusta el rango o los días.');
+    if (contarSesionesPrevistas(diasSemana) === 0) {
+      alert(
+        storageService.getCortes().length === 0
+          ? 'Primero registra los cortes en Configuración → Cortes: las clases de los talleres se generan a partir de ellos.'
+          : 'Con esos días el taller no tendría ninguna clase en los cortes registrados.'
+      );
       return;
     }
     const costoNuevo = costo.trim() ? Number(costo) : undefined;
@@ -251,8 +243,6 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
         dias_semana: diasSemana,
         hora_inicio: horaInicio,
         hora_fin: horaFin,
-        fecha_inicio_ciclo: fechaInicio,
-        fecha_fin_ciclo: fechaFin,
         aula: aula.trim() || 'Taller Principal',
       });
 
@@ -854,34 +844,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Inicio de Ciclo
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={fechaInicio}
-                    onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Fin de Ciclo
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={fechaFin}
-                    onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <VistaPreviaSesiones fechaInicio={fechaInicio} fechaFin={fechaFin} diasSemana={diasSemana} />
+              <VistaPreviaSesiones diasSemana={diasSemana} />
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end gap-2">
                 <button
@@ -893,7 +856,13 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  disabled={storageService.getCortes().length === 0}
+                  title={
+                    storageService.getCortes().length === 0
+                      ? 'Primero registra los cortes en Configuración → Cortes'
+                      : undefined
+                  }
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Crear Taller
                 </button>
@@ -1039,41 +1008,13 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Inicio del Taller
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={editFechaInicio}
-                      onChange={(e) => setEditFechaInicio(e.target.value)}
-                      className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Fin del Taller
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      min={editFechaInicio || undefined}
-                      value={editFechaFin}
-                      onChange={(e) => setEditFechaFin(e.target.value)}
-                      className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                  Al cambiar fechas o días se ajusta el calendario de sesiones. Las sesiones con asistencia registrada y las
-                  extraordinarias no se eliminan.
+              <div className="space-y-1.5">
+                <VistaPreviaSesiones diasSemana={editDiasSemana} creadoEn={editingGrupo.creado_en} />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Al cambiar los días se ajusta el calendario de sesiones dentro de los cortes. Las sesiones con asistencia
+                  registrada, las cerradas y las extraordinarias no se eliminan.
                 </p>
               </div>
-
-              <VistaPreviaSesiones fechaInicio={editFechaInicio} fechaFin={editFechaFin} diasSemana={editDiasSemana} />
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end gap-2">
                 <button

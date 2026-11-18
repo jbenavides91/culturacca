@@ -3,6 +3,7 @@ import { AlertCircle, CalendarOff, CheckCircle2, Download, Pencil, Plus, Trash2,
 import { DiaNoLectivo, TipoDiaNoLectivo } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { fechaLocalISO } from '../../utils/fechas';
+import { resumenCambios } from '../../utils/calendario';
 
 const TIPOS: { valor: TipoDiaNoLectivo; etiqueta: string; clase: string }[] = [
   {
@@ -41,15 +42,6 @@ const diasDelRango = (d: DiaNoLectivo) => {
   const [y1, m1, d1] = d.fecha_inicio.split('-').map(Number);
   const [y2, m2, d2] = d.fecha_fin.split('-').map(Number);
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000) + 1;
-};
-
-const resumenCambios = (r: { sesionesAgregadas: number; sesionesEliminadas: number; sesionesConservadas: number }) => {
-  const partes: string[] = [];
-  if (r.sesionesEliminadas > 0) partes.push(`se quitaron ${r.sesionesEliminadas} clase(s) de los talleres`);
-  if (r.sesionesAgregadas > 0) partes.push(`se restauraron ${r.sesionesAgregadas} clase(s)`);
-  if (r.sesionesConservadas > 0)
-    partes.push(`${r.sesionesConservadas} clase(s) se conservaron porque ya están cerradas o tienen asistencia`);
-  return partes.length > 0 ? ` En el calendario ${partes.join('; ')}.` : ' El calendario de los talleres no cambió.';
 };
 
 const formVacio = () => ({ motivo: '', tipo: 'FERIADO' as TipoDiaNoLectivo, fecha_inicio: '', fecha_fin: '' });
