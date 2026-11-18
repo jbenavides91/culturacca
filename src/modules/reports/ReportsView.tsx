@@ -11,6 +11,7 @@ import {
   Receipt,
   CalendarCheck,
   NotebookPen,
+  CalendarRange,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -21,13 +22,14 @@ import { storageService, subscribeToData } from '../../services/storage.service'
 import { exportService } from '../../services/export.service';
 import { ReceiptsHistoryTab } from './ReceiptsHistoryTab';
 import { AnecdotarioHistoryTab } from './AnecdotarioHistoryTab';
+import { CorteBimestralTab } from './CorteBimestralTab';
 import { cicloActual, nombreInstitucion } from '../../utils/institucion';
 
 interface ReportsViewProps {
   currentProfile: Perfil;
 }
 
-type ReportTab = 'asistencia' | 'recibos' | 'anecdotario';
+type ReportTab = 'asistencia' | 'recibos' | 'corte' | 'anecdotario';
 
 /** Ausencia o justificación de un alumno en una sesión cerrada */
 interface Incidencia {
@@ -53,9 +55,9 @@ const MAX_CHIPS = 4;
 export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const availableTabs: ReportTab[] =
     currentProfile.rol === 'ADMIN'
-      ? ['asistencia', 'recibos', 'anecdotario']
+      ? ['asistencia', 'recibos', 'corte', 'anecdotario']
       : currentProfile.rol === 'CAJERO'
-      ? ['recibos']
+      ? ['recibos', 'corte']
       : ['asistencia', 'anecdotario'];
   const [activeTab, setActiveTab] = useState<ReportTab>(availableTabs[0]);
   const reportTab: ReportTab = availableTabs.includes(activeTab) ? activeTab : availableTabs[0];
@@ -283,8 +285,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
             {currentProfile.rol === 'PROFESOR'
               ? 'Seguimiento de ausentismo, alertas de tus talleres asignados e historial de tus anotaciones del anecdotario.'
               : currentProfile.rol === 'CAJERO'
-              ? 'Historial de recibos contables y pagos registrados en la ventanilla de Caja.'
-              : 'Análisis de ausentismo estudiantil, alertas tempranas, historial de recibos, anecdotario y exportación de informes institucionales.'}
+              ? 'Historial de recibos contables y corte bimestral: cobro esperado, altas y bajas, y matrículas cobradas.'
+              : 'Análisis de ausentismo estudiantil, alertas tempranas, historial de recibos, corte bimestral, anecdotario y exportación de informes institucionales.'}
           </p>
         </div>
 
@@ -334,6 +336,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
                   <NotebookPen className="w-4 h-4" />
                   <span>Anecdotario</span>
                 </>
+              ) : tab === 'corte' ? (
+                <>
+                  <CalendarRange className="w-4 h-4" />
+                  <span>Corte bimestral</span>
+                </>
               ) : (
                 <>
                   <Receipt className="w-4 h-4" />
@@ -349,6 +356,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
         <ReceiptsHistoryTab />
       ) : reportTab === 'anecdotario' ? (
         <AnecdotarioHistoryTab currentProfile={currentProfile} />
+      ) : reportTab === 'corte' ? (
+        <CorteBimestralTab currentProfile={currentProfile} />
       ) : (
       <>
       {/* KPI Cards */}

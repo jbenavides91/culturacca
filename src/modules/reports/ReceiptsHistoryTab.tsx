@@ -4,7 +4,7 @@ import { SolicitudMatricula } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { ReceiptCertificateModal, formatFechaCaja } from '../cashier/ReceiptCertificateModal';
 import { formatearMonto, montoDeSolicitud } from '../../utils/arancel';
-import { fechaLocalISO } from '../../utils/fechas';
+import { fechaLocalISO, fechaPagoLocal } from '../../utils/fechas';
 import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
@@ -18,13 +18,8 @@ const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'rango', label: 'Rango' },
 ];
 
-/** Fecha local (YYYY-MM-DD) del pago: fecha_pago, o fecha_aceptacion si no hay; '' si no tiene */
-const fechaDePago = (s: SolicitudMatricula) => {
-  const iso = s.fecha_pago || s.fecha_aceptacion;
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : fechaLocalISO(d);
-};
+/** Fecha local (YYYY-MM-DD) del pago (regla compartida en utils/fechas) */
+const fechaDePago = (s: SolicitudMatricula) => fechaPagoLocal(s);
 
 const fechaCorta = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number);

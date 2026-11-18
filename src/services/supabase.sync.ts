@@ -25,7 +25,9 @@ export type StorageKey =
   | 'aa_anecdotario'
   | 'aa_salones'
   | 'aa_grados'
-  | 'aa_dias_no_lectivos';
+  | 'aa_dias_no_lectivos'
+  | 'aa_cortes_bimestrales'
+  | 'aa_movimientos_inscripcion';
 
 interface TableDef {
   table: string;
@@ -134,6 +136,20 @@ export const TABLES: Record<StorageKey, TableDef> = {
     columns: ['id', 'fecha_inicio', 'fecha_fin', 'motivo', 'tipo', 'creado_en'],
     tags: ['dias_no_lectivos', 'sesiones'],
     defaults: { tipo: 'OTRO' },
+  },
+  aa_cortes_bimestrales: {
+    table: 'cortes_bimestrales',
+    columns: ['id', 'nombre', 'fecha_inicio', 'fecha_fin', 'creado_en'],
+    tags: ['cortes'],
+  },
+  aa_movimientos_inscripcion: {
+    table: 'movimientos_inscripcion',
+    columns: [
+      'id', 'tipo', 'estudiante_id', 'grupo_id', 'estudiante_nombre', 'grupo_nombre', 'fecha', 'motivo',
+      'registrado_por', 'creado_en',
+    ],
+    tags: ['movimientos', 'cortes'],
+    insertOnly: true,
   },
 };
 

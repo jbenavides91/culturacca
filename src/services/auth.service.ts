@@ -104,6 +104,7 @@ async function startSession(userId: string): Promise<string | null> {
     }
 
     activeProfile = perfil;
+    storageService.setPerfilActual(perfil);
     await storageService.hydrate();
     status = 'ready';
     notifyAuthChange();
@@ -120,6 +121,7 @@ async function startSession(userId: string): Promise<string | null> {
 
 function endSession() {
   activeProfile = null;
+  storageService.setPerfilActual(null);
   cachedAccessToken = null;
   storageService.reset();
   status = 'signed_out';

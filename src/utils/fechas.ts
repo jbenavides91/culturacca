@@ -9,3 +9,14 @@ export const fechaLocalISO = (d: Date = new Date()): string => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
+
+/**
+ * Fecha local (YYYY-MM-DD) del pago de una matrícula: fecha_pago, o fecha_aceptacion si no hay;
+ * '' si no tiene. Misma regla en Recibos y en los Cortes bimestrales.
+ */
+export const fechaPagoLocal = (s: { fecha_pago?: string; fecha_aceptacion?: string }): string => {
+  const iso = s.fecha_pago || s.fecha_aceptacion;
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : fechaLocalISO(d);
+};

@@ -3,7 +3,15 @@ import {
   Anotacion,
   Asistencia,
   ConfiguracionSistema,
+  CorteBimestral,
   DiaNoLectivo,
+  EstadoMesCorte,
+  FilaCorteAlumno,
+  FilaCorteTaller,
+  MatriculaCorte,
+  MovimientoInscripcion,
+  ResultadoCorte,
+  TipoMovimiento,
   EstadoEstudiante,
   EstadoMatricula,
   EstadoPagoAnual,
@@ -23,7 +31,7 @@ import { cacheService } from './cache.service';
 import { notificationService } from './notification.service';
 import { supabase } from './supabase.client';
 import { StorageKey, syncStore, TABLES } from './supabase.sync';
-import { fechaLocalISO } from '../utils/fechas';
+import { fechaLocalISO, fechaPagoLocal } from '../utils/fechas';
 
 const STORAGE_KEYS = {
   PERFILES: 'aa_perfiles',
@@ -40,6 +48,8 @@ const STORAGE_KEYS = {
   SALONES: 'aa_salones',
   GRADOS: 'aa_grados',
   DIAS_NO_LECTIVOS: 'aa_dias_no_lectivos',
+  CORTES: 'aa_cortes_bimestrales',
+  MOVIMIENTOS: 'aa_movimientos_inscripcion',
 } as const satisfies Record<string, StorageKey>;
 
 // Listeners for data updates
@@ -108,6 +118,13 @@ const DEFAULT_CONFIG: ConfiguracionSistema = {
 };
 
 class StorageService {
+  /** Perfil con sesión iniciada (lo fija auth.service); firma la bitácora de movimientos */
+  private perfilActual: Pick<Perfil, 'id' | 'rol'> | null = null;
+
+  setPerfilActual(perfil: Pick<Perfil, 'id' | 'rol'> | null): void {
+    this.perfilActual = perfil;
+  }
+
   // --- CICLO DE VIDA DE DATOS (Supabase) ---
 
   /** Descarga todos los datos desde Supabase y activa la sincronización en tiempo real */
@@ -312,6 +329,9 @@ class StorageService {
     const inscripciones = this.getInscripciones().filter((i) => i.grupo_id === grupoId);
     const alumnosLiberados = new Set(inscripciones.map((i) => i.estudiante_id)).size;
 
+    inscripciones.forEach((i) =>
+      this.registrarMovimiento('BAJA_TALLER', i.estudiante_id, grupoId, 'Taller eliminado')
+    );
     this.remove(STORAGE_KEYS.ASISTENCIAS, asistenciaIds);
     this.remove(STORAGE_KEYS.SESIONES, sesionIds);
     this.remove(STORAGE_KEYS.INSCRIPCIONES, inscripciones.map((i) => i.id));
@@ -655,6 +675,7 @@ class StorageService {
     });
 
     this.write(STORAGE_KEYS.INSCRIPCIONES, inscripciones);
+    this.registrarMovimiento('ALTA_TALLER', estudianteId, grupoId);
     cacheService.invalidateByTag('estudiantes');
     cacheService.invalidateByTag('inscripciones');
     cacheService.invalidateByTag('alertas');
@@ -670,6 +691,7 @@ class StorageService {
     const idsAEliminar = this.getInscripciones()
       .filter((i) => i.grupo_id === grupoId && i.estudiante_id === estudianteId)
       .map((i) => i.id);
+    if (idsAEliminar.length > 0) this.registrarMovimiento('BAJA_TALLER', estudianteId, grupoId);
     this.remove(STORAGE_KEYS.INSCRIPCIONES, idsAEliminar);
     cacheService.invalidateByTag('estudiantes');
     cacheService.invalidateByTag('inscripciones');
@@ -754,6 +776,7 @@ class StorageService {
         fecha_inscripcion: fechaLocalISO(),
       });
       this.write(STORAGE_KEYS.INSCRIPCIONES, inscripciones);
+      this.registrarMovimiento('ALTA_TALLER', nuevo.id, grupoId);
     }
 
     cacheService.invalidateByTag('estudiantes');
@@ -790,22 +813,28 @@ class StorageService {
    * Da de baja temporalmente a un alumno sin eliminar su expediente ni historial
    */
   darDeBajaEstudiante(id: string, motivo: string): Estudiante {
-    return this.actualizarEstudiante(id, {
+    const motivoBaja = motivo.trim() || 'Baja temporal solicitada';
+    const actualizado = this.actualizarEstudiante(id, {
       estado: 'BAJA',
       fecha_baja: new Date().toISOString(),
-      motivo_baja: motivo.trim() || 'Baja temporal solicitada',
+      motivo_baja: motivoBaja,
     });
+    this.registrarMovimiento('BAJA_ALUMNO', id, null, motivoBaja);
+    return actualizado;
   }
 
   /**
    * Reactiva o reincorpora a un alumno que estaba de baja para que vuelva a cursos
    */
   reactivarEstudiante(id: string): Estudiante {
-    return this.actualizarEstudiante(id, {
+    const estabaDeBaja = this.getEstudiantes().find((e) => e.id === id)?.estado === 'BAJA';
+    const actualizado = this.actualizarEstudiante(id, {
       estado: 'ACTIVO',
       fecha_reactivacion: new Date().toISOString(),
       motivo_baja: undefined,
     });
+    if (estabaDeBaja) this.registrarMovimiento('REACTIVACION_ALUMNO', id);
+    return actualizado;
   }
 
   /**
@@ -1749,6 +1778,400 @@ class StorageService {
     return { agregados: nuevos.length, ...this.reaplicarCalendarioATodos() };
   }
 
+  // --- BITÁCORA DE ALTAS Y BAJAS (solo inserción; base de los cortes bimestrales) ---
+
+  getMovimientos(): MovimientoInscripcion[] {
+    const cached = cacheService.get<MovimientoInscripcion[]>('movimientos_all');
+    if (cached) return cached;
+    const data = this.read<MovimientoInscripcion[]>(STORAGE_KEYS.MOVIMIENTOS, [])
+      .map((m) => ({ ...m, fecha: String(m.fecha).slice(0, 10) }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.creado_en).localeCompare(String(b.creado_en)));
+    cacheService.set('movimientos_all', data, 60000, ['movimientos']);
+    return data;
+  }
+
+  /**
+   * Registra un alta o baja. Solo lo hacen los roles que escriben inscripciones y alumnos
+   * (ADMIN, CAJERO, MATRICULA); para otros roles se omite, porque RLS lo rechazaría.
+   */
+  private registrarMovimiento(
+    tipo: TipoMovimiento,
+    estudianteId: string,
+    grupoId?: string | null,
+    motivo?: string
+  ): void {
+    const rol = this.perfilActual?.rol;
+    if (rol && !['ADMIN', 'CAJERO', 'MATRICULA'].includes(rol)) return;
+    const est = this.read<Estudiante[]>(STORAGE_KEYS.ESTUDIANTES, []).find((e) => e.id === estudianteId);
+    const grupo = grupoId ? this.getGrupoById(grupoId) : undefined;
+    const mov: MovimientoInscripcion = {
+      id: `mov-${nuevoId()}`,
+      tipo,
+      estudiante_id: estudianteId,
+      grupo_id: grupoId || null,
+      estudiante_nombre: est ? `${est.nombre} ${est.apellido}`.trim() : undefined,
+      grupo_nombre: grupo?.nombre,
+      fecha: fechaLocalISO(),
+      motivo: motivo?.trim() || null,
+      registrado_por: this.perfilActual?.id || null,
+      creado_en: new Date().toISOString(),
+    };
+    this.write(STORAGE_KEYS.MOVIMIENTOS, [mov]);
+    cacheService.invalidateByTag('movimientos');
+  }
+
+  // --- CORTES BIMESTRALES (ADMIN define fechas; ADMIN y CAJERO ven el reporte) ---
+
+  getCortes(): CorteBimestral[] {
+    const cached = cacheService.get<CorteBimestral[]>('cortes_all');
+    if (cached) return cached;
+    const data = this.read<CorteBimestral[]>(STORAGE_KEYS.CORTES, [])
+      .map((c) => ({
+        ...c,
+        fecha_inicio: String(c.fecha_inicio).slice(0, 10),
+        fecha_fin: String(c.fecha_fin).slice(0, 10),
+      }))
+      .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+    cacheService.set('cortes_all', data, 60000, ['cortes']);
+    return data;
+  }
+
+  private validarCorte(datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>, excluirId?: string) {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const nombre = (datos.nombre || '').trim();
+    if (!nombre) throw new Error('Indica el nombre del corte (por ejemplo: I Bimestre 2027).');
+    if (nombre.length > 80) throw new Error('El nombre no puede superar los 80 caracteres.');
+    if (!iso.test(datos.fecha_inicio) || !iso.test(datos.fecha_fin)) throw new Error('Indica las fechas Desde y Hasta.');
+    if (datos.fecha_fin < datos.fecha_inicio) throw new Error('La fecha Hasta no puede ser anterior a Desde.');
+    const otros = this.getCortes().filter((c) => c.id !== excluirId);
+    if (otros.some((c) => c.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
+      throw new Error(`Ya existe un corte llamado "${nombre}".`);
+    }
+    const choque = otros.find((c) => c.fecha_inicio <= datos.fecha_fin && datos.fecha_inicio <= c.fecha_fin);
+    if (choque) throw new Error(`Las fechas se cruzan con el corte "${choque.nombre}".`);
+    return { nombre, fecha_inicio: datos.fecha_inicio, fecha_fin: datos.fecha_fin };
+  }
+
+  crearCorte(datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>): CorteBimestral {
+    const nuevo: CorteBimestral = {
+      id: `cor-${nuevoId()}`,
+      ...this.validarCorte(datos),
+      creado_en: new Date().toISOString(),
+    };
+    this.write(STORAGE_KEYS.CORTES, [nuevo]);
+    cacheService.invalidateByTag('cortes');
+    notifyDataChange();
+    return nuevo;
+  }
+
+  actualizarCorte(id: string, datos: Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>): CorteBimestral {
+    const actual = this.getCortes().find((c) => c.id === id);
+    if (!actual) throw new Error('Corte no encontrado.');
+    const actualizado: CorteBimestral = { ...actual, ...this.validarCorte(datos, id), id };
+    this.write(STORAGE_KEYS.CORTES, [actualizado]);
+    cacheService.invalidateByTag('cortes');
+    notifyDataChange();
+    return actualizado;
+  }
+
+  eliminarCorte(id: string): void {
+    this.remove(STORAGE_KEYS.CORTES, [id]);
+    cacheService.invalidateByTag('cortes');
+    notifyDataChange();
+  }
+
+  /** Seis bimestres de calendario de un año (Ene–Feb … Nov–Dic), para pre-llenar y editar */
+  proponerBimestresDelAnio(anio: number): Pick<CorteBimestral, 'nombre' | 'fecha_inicio' | 'fecha_fin'>[] {
+    const romanos = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+    return romanos.map((r, i) => {
+      const mesInicio = i * 2 + 1;
+      const ultimoDia = new Date(Date.UTC(anio, mesInicio + 1, 0)).getUTCDate();
+      const mm = (m: number) => String(m).padStart(2, '0');
+      return {
+        nombre: `${r} Bimestre ${anio}`,
+        fecha_inicio: `${anio}-${mm(mesInicio)}-01`,
+        fecha_fin: `${anio}-${mm(mesInicio + 1)}-${ultimoDia}`,
+      };
+    });
+  }
+
+  /** Crea los bimestres propuestos de un año, omitiendo los que se cruzan con cortes existentes */
+  crearBimestresDelAnio(anio: number): { creados: number; omitidos: number } {
+    let creados = 0;
+    let omitidos = 0;
+    for (const b of this.proponerBimestresDelAnio(anio)) {
+      try {
+        this.crearCorte(b);
+        creados++;
+      } catch {
+        omitidos++;
+      }
+    }
+    return { creados, omitidos };
+  }
+
+  /** Mensualidad de un taller: su costo propio o el arancel general (misma regla que utils/arancel) */
+  private mensualidadDe(grupo?: Grupo): number {
+    const propio = Number(grupo?.costo);
+    if (propio > 0) return propio;
+    const general = Number(this.getConfiguracion().arancel_taller);
+    return general > 0 ? general : 1200;
+  }
+
+  /**
+   * Reporte del corte: cobro esperado por taller y alumno, altas y bajas, y matrículas cobradas.
+   * No registra mensualidades: un mes es cobrable si el alumno estuvo inscrito al menos un día
+   * de ese mes (mes completo), salvo el mes que cubre su matrícula pagada.
+   */
+  calcularCorteBimestral(corteId: string, gruposPermitidos?: string[]): ResultadoCorte | null {
+    const corte = this.getCortes().find((c) => c.id === corteId);
+    if (!corte) return null;
+    const claveCache = `corte_${corteId}_${gruposPermitidos ? gruposPermitidos.slice().sort().join(',') : 'todos'}`;
+    const cached = cacheService.get<ResultadoCorte>(claveCache);
+    if (cached) return cached;
+
+    const permitido = (grupoId?: string | null) =>
+      !!grupoId && (!gruposPermitidos || gruposPermitidos.includes(grupoId));
+
+    // ---- Calendario: meses (YYYY-MM) que toca el corte y días de cada mes ----
+    const mesDe = (fecha: string) => fecha.slice(0, 7);
+    const siguienteMes = (mes: string) => {
+      const [y, m] = mes.split('-').map(Number);
+      return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    };
+    const meses: string[] = [];
+    for (let m = mesDe(corte.fecha_inicio); m <= mesDe(corte.fecha_fin); m = siguienteMes(m)) meses.push(m);
+    const diasDelMes = new Map<string, string[]>();
+    const diasDe = (mes: string) => {
+      let dias = diasDelMes.get(mes);
+      if (!dias) {
+        const [y, m] = mes.split('-').map(Number);
+        const total = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        dias = Array.from({ length: total }, (_, i) => `${mes}-${String(i + 1).padStart(2, '0')}`);
+        diasDelMes.set(mes, dias);
+      }
+      return dias;
+    };
+
+    // ---- Intervalos de inscripción por (alumno, taller) y pausas por baja del alumno ----
+    type Intervalo = { desde: string; hasta: string | null }; // hasta exclusivo
+    const movimientos = this.getMovimientos();
+    const inscripciones = this.getInscripciones();
+    const estudiantes = this.read<Estudiante[]>(STORAGE_KEYS.ESTUDIANTES, []);
+    const estudiantePorId = new Map(estudiantes.map((e) => [e.id, e]));
+    const grupos = this.getGrupos();
+    const grupoPorId = new Map(grupos.map((g) => [g.id, g]));
+    const perfiles = new Map(this.getPerfiles().map((p) => [p.id, `${p.nombre} ${p.apellido || ''}`.trim()]));
+
+    const intervalos = new Map<string, Intervalo[]>(); // clave estudiante|grupo
+    const nombreGrupoMov = new Map<string, string>();
+    const inscritoAhora = new Set(inscripciones.map((i) => `${i.estudiante_id}|${i.grupo_id}`));
+    const pares = new Set<string>(inscritoAhora);
+
+    for (const mov of movimientos) {
+      if (!mov.grupo_id || (mov.tipo !== 'ALTA_TALLER' && mov.tipo !== 'BAJA_TALLER')) continue;
+      const clave = `${mov.estudiante_id}|${mov.grupo_id}`;
+      pares.add(clave);
+      if (mov.grupo_nombre) nombreGrupoMov.set(mov.grupo_id, mov.grupo_nombre);
+      const lista = intervalos.get(clave) ?? [];
+      const abierto = lista.length > 0 && lista[lista.length - 1].hasta === null ? lista[lista.length - 1] : null;
+      if (mov.tipo === 'ALTA_TALLER') {
+        if (!abierto) lista.push({ desde: mov.fecha, hasta: null });
+      } else if (abierto) {
+        abierto.hasta = mov.fecha;
+      }
+      intervalos.set(clave, lista);
+    }
+    // Inscripciones vigentes sin alta en la bitácora: desde su fecha de inscripción
+    for (const ins of inscripciones) {
+      const clave = `${ins.estudiante_id}|${ins.grupo_id}`;
+      if (!intervalos.get(clave)?.length) {
+        intervalos.set(clave, [{ desde: String(ins.fecha_inscripcion).slice(0, 10), hasta: null }]);
+      }
+    }
+
+    const pausas = new Map<string, Intervalo[]>(); // por alumno: de la baja a la reactivación
+    for (const mov of movimientos) {
+      if (mov.tipo !== 'BAJA_ALUMNO' && mov.tipo !== 'REACTIVACION_ALUMNO') continue;
+      const lista = pausas.get(mov.estudiante_id) ?? [];
+      const abierta = lista.length > 0 && lista[lista.length - 1].hasta === null ? lista[lista.length - 1] : null;
+      if (mov.tipo === 'BAJA_ALUMNO') {
+        if (!abierta) lista.push({ desde: mov.fecha, hasta: null });
+      } else if (abierta) {
+        abierta.hasta = mov.fecha;
+      }
+      pausas.set(mov.estudiante_id, lista);
+    }
+    // Alumno de baja sin registro en la bitácora: pausa desde su fecha de baja
+    for (const est of estudiantes) {
+      if (est.estado !== 'BAJA' || pausas.get(est.id)?.some((p) => p.hasta === null)) continue;
+      const desde = est.fecha_baja
+        ? est.fecha_baja.length === 10
+          ? est.fecha_baja
+          : fechaLocalISO(new Date(est.fecha_baja))
+        : '0000-01-01';
+      pausas.set(est.id, [...(pausas.get(est.id) ?? []), { desde, hasta: null }]);
+    }
+
+    const dentro = (dia: string, i: Intervalo) => i.desde <= dia && (i.hasta === null || dia < i.hasta);
+    const activoEn = (clave: string, estudianteId: string, dia: string) =>
+      (intervalos.get(clave) ?? []).some((i) => dentro(dia, i)) &&
+      !(pausas.get(estudianteId) ?? []).some((p) => dentro(dia, p));
+    const activoEnMes = (clave: string, estudianteId: string, mes: string) =>
+      diasDe(mes).some((dia) => activoEn(clave, estudianteId, dia));
+
+    // ---- Matrículas pagadas (solvente con monto): cubren el primer mes activo desde su pago ----
+    const pagadas = this.getSolicitudesMatricula().filter((s) => s.solvente && fechaPagoLocal(s));
+    const mesCubierto = new Map<string, Set<string>>(); // clave estudiante|grupo → meses cubiertos
+    for (const sol of pagadas) {
+      const estId = sol.estudiante_id_creado || sol.estudiante_id;
+      if (!estId || !sol.grupo_id) continue;
+      const clave = `${estId}|${sol.grupo_id}`;
+      let mes = mesDe(fechaPagoLocal(sol));
+      for (let i = 0; i < 12; i++, mes = siguienteMes(mes)) {
+        if (activoEnMes(clave, estId, mes)) {
+          const set = mesCubierto.get(clave) ?? new Set<string>();
+          set.add(mes);
+          mesCubierto.set(clave, set);
+          break;
+        }
+      }
+    }
+
+    // ---- Asistencia del periodo (solo sesiones cerradas del corte) ----
+    const asistenciaPorClave = new Map<string, AlertaEstudiante>();
+    this.calcularAlertasEstudiantes(undefined, { desde: corte.fecha_inicio, hasta: corte.fecha_fin }).forEach((a) =>
+      asistenciaPorClave.set(`${a.estudiante_id}|${a.grupo_id}`, a)
+    );
+
+    // ---- Detalle por alumno y taller ----
+    const detalle: FilaCorteAlumno[] = [];
+    for (const clave of pares) {
+      const [estudianteId, grupoId] = clave.split('|');
+      if (!permitido(grupoId)) continue;
+      const grupo = grupoPorId.get(grupoId);
+      const mensualidad = this.mensualidadDe(grupo);
+      const cubiertos = mesCubierto.get(clave);
+      const estadoMeses = meses.map((mes) => ({
+        mes,
+        estado: (!activoEnMes(clave, estudianteId, mes)
+          ? 'INACTIVO'
+          : cubiertos?.has(mes)
+          ? 'MATRICULA'
+          : 'COBRABLE') as EstadoMesCorte,
+      }));
+      if (estadoMeses.every((m) => m.estado === 'INACTIVO')) continue;
+      const est = estudiantePorId.get(estudianteId);
+      const movNombre = movimientos.find((m) => m.estudiante_id === estudianteId && m.estudiante_nombre)?.estudiante_nombre;
+      const asis = asistenciaPorClave.get(clave);
+      const mesesCobrables = estadoMeses.filter((m) => m.estado === 'COBRABLE').length;
+      detalle.push({
+        estudiante_id: estudianteId,
+        nombre: est?.nombre ?? movNombre ?? 'Alumno eliminado',
+        apellido: est?.apellido ?? '',
+        grado: est?.grado,
+        grupo_id: grupoId,
+        grupo_nombre: grupo?.nombre ?? nombreGrupoMov.get(grupoId) ?? 'Taller eliminado',
+        mensualidad,
+        meses: estadoMeses,
+        mesesCobrables,
+        mesesMatricula: estadoMeses.filter((m) => m.estado === 'MATRICULA').length,
+        cobroEsperado: mesesCobrables * mensualidad,
+        activoAlCierre: activoEn(clave, estudianteId, corte.fecha_fin),
+        sesionesCerradas: asis?.sesiones_cerradas ?? 0,
+        ausencias: asis?.total_ausencias ?? 0,
+        justificadas: asis?.total_justificadas ?? 0,
+        porcentajeAsistencia:
+          asis && asis.sesiones_cerradas > 0
+            ? Math.round((asis.total_asistencias / asis.sesiones_cerradas) * 100)
+            : null,
+      });
+    }
+
+    // ---- Altas, bajas y matrículas del periodo ----
+    const enCorte = (fecha: string) => corte.fecha_inicio <= fecha && fecha <= corte.fecha_fin;
+    const visibleMov = (m: MovimientoInscripcion) =>
+      m.grupo_id
+        ? permitido(m.grupo_id)
+        : !gruposPermitidos || detalle.some((d) => d.estudiante_id === m.estudiante_id);
+    const delCorte = movimientos.filter((m) => enCorte(m.fecha) && visibleMov(m));
+    const altas = delCorte.filter((m) => m.tipo === 'ALTA_TALLER' || m.tipo === 'REACTIVACION_ALUMNO');
+    const bajas = delCorte.filter((m) => m.tipo === 'BAJA_TALLER' || m.tipo === 'BAJA_ALUMNO');
+
+    const matriculas: MatriculaCorte[] = pagadas
+      .filter((s) => enCorte(fechaPagoLocal(s)) && permitido(s.grupo_id))
+      .map((s) => ({
+        id: s.id,
+        codigo_solicitud: s.codigo_solicitud,
+        tipo_tramite: s.tipo_tramite,
+        alumno: `${s.nombre_alumno} ${s.apellido_alumno}`.trim(),
+        grupo_id: s.grupo_id,
+        grupo_nombre: grupoPorId.get(s.grupo_id)?.nombre ?? s.grupo_nombre,
+        fecha_pago: fechaPagoLocal(s),
+        monto: Number(s.monto_arancel) || 0,
+        numero_recibo_caja: s.numero_recibo_caja,
+        metodo_pago: s.metodo_pago,
+      }));
+
+    // ---- Resumen por taller (todos los talleres visibles, más los eliminados con alumnos en el corte) ----
+    const idsTalleres = new Set<string>([
+      ...grupos.filter((g) => permitido(g.id)).map((g) => g.id),
+      ...detalle.map((d) => d.grupo_id),
+    ]);
+    const talleres: FilaCorteTaller[] = Array.from(idsTalleres).map((grupoId) => {
+      const grupo = grupoPorId.get(grupoId);
+      const filas = detalle.filter((d) => d.grupo_id === grupoId);
+      return {
+        grupo_id: grupoId,
+        grupo_nombre: grupo?.nombre ?? nombreGrupoMov.get(grupoId) ?? 'Taller eliminado',
+        profesor_nombre: grupo ? perfiles.get(grupo.profesor_id) ?? 'Sin docente' : '—',
+        eliminado: !grupo,
+        mensualidad: this.mensualidadDe(grupo),
+        alumnos: filas.length,
+        mesesCobrables: filas.reduce((s, f) => s + f.mesesCobrables, 0),
+        mesesMatricula: filas.reduce((s, f) => s + f.mesesMatricula, 0),
+        cobroEsperado: filas.reduce((s, f) => s + f.cobroEsperado, 0),
+        altas: altas.filter((m) => m.grupo_id === grupoId).length,
+        bajas: bajas.filter((m) => m.grupo_id === grupoId).length,
+      };
+    });
+
+    const resultado: ResultadoCorte = {
+      corte,
+      meses,
+      talleres,
+      detalle,
+      altas,
+      bajas,
+      matriculas,
+      resumen: {
+        talleres: talleres.filter((t) => t.alumnos > 0).length,
+        alumnosActivos: new Set(detalle.map((d) => d.estudiante_id)).size,
+        mesesCobrables: detalle.reduce((s, d) => s + d.mesesCobrables, 0),
+        mesesMatricula: detalle.reduce((s, d) => s + d.mesesMatricula, 0),
+        cobroEsperado: detalle.reduce((s, d) => s + d.cobroEsperado, 0),
+        matriculasCobradas: matriculas.length,
+        montoMatriculas: matriculas.reduce((s, m) => s + m.monto, 0),
+        altas: altas.length,
+        bajas: bajas.length,
+      },
+      arancelPorCiclo: this.getConfiguracion().arancel_periodo === 'CICLO',
+    };
+    cacheService.set(claveCache, resultado, 60000, [
+      'cortes',
+      'movimientos',
+      'inscripciones',
+      'estudiantes',
+      'matriculas',
+      'grupos',
+      'asistencias',
+      'sesiones',
+      'config',
+      'alertas',
+    ]);
+    return resultado;
+  }
+
   /**
    * Impide asignar un salón ocupado por otro taller en días/horario/ciclo coincidentes.
    * Reutiliza la detección de choques de horario entre talleres.
@@ -2167,6 +2590,10 @@ class StorageService {
     const timestampActual = new Date().toISOString();
 
     if (estudiante) {
+      const estabaDeBaja = estudiante.estado === 'BAJA';
+      if (estabaDeBaja) {
+        this.registrarMovimiento('REACTIVACION_ALUMNO', estudiante.id, null, 'Reincorporado al aceptar su matrícula');
+      }
       estudiante = {
         ...estudiante,
         nombre: solicitud.nombre_alumno,

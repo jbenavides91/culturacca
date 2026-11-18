@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { AlertaEstudiante, Asistencia, Estudiante, Grupo, Sesion } from '../types/attendance';
+import { AlertaEstudiante, Asistencia, Estudiante, Grupo, ResultadoCorte, Sesion } from '../types/attendance';
 import { storageService } from './storage.service';
 import { cicloActual, nombreInstitucion } from '../utils/institucion';
 import { fechaLocalISO } from '../utils/fechas';
@@ -381,6 +381,154 @@ export class ExportService {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Anecdotario');
     XLSX.writeFile(wb, `Anecdotario_${fechaLocalISO()}.xlsx`);
+  }
+
+  /**
+   * Corte bimestral: 5 hojas fijas (Resumen, Cobro por Taller, Detalle por Alumno, Altas y Bajas, Matrículas).
+   * Montos como números (C$) para que se puedan sumar y filtrar en Excel.
+   */
+  exportCorteBimestral(datos: ResultadoCorte): void {
+    const { corte, meses, resumen } = datos;
+    const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const etiquetaMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(0, 4)}`;
+    const fecha = (iso: string) => {
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('es-ES');
+    };
+    const TIPOS: Record<string, string> = {
+      ALTA_TALLER: 'Alta en taller',
+      BAJA_TALLER: 'Baja del taller',
+      BAJA_ALUMNO: 'Baja del alumno',
+      REACTIVACION_ALUMNO: 'Reincorporación',
+    };
+
+    const wb = XLSX.utils.book_new();
+
+    const wsResumen = XLSX.utils.aoa_to_sheet([
+      [nombreInstitucion().toUpperCase()],
+      ['CORTE BIMESTRAL: COBRO ESPERADO, ALTAS Y BAJAS, MATRÍCULAS'],
+      [''],
+      ['Corte:', corte.nombre],
+      ['Periodo:', `${fecha(corte.fecha_inicio)} al ${fecha(corte.fecha_fin)}`],
+      ['Meses del corte:', meses.map(etiquetaMes).join(', ')],
+      ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
+      [''],
+      ['Talleres con alumnos:', resumen.talleres],
+      ['Alumnos activos en el periodo:', resumen.alumnosActivos],
+      ['Mensualidades a cobrar:', resumen.mesesCobrables],
+      ['Meses cubiertos por matrícula:', resumen.mesesMatricula],
+      ['Cobro esperado (C$):', resumen.cobroEsperado],
+      ['Matrículas cobradas:', resumen.matriculasCobradas],
+      ['Monto de matrículas (C$):', resumen.montoMatriculas],
+      ['Altas:', resumen.altas],
+      ['Bajas:', resumen.bajas],
+      [''],
+      ['Las mensualidades no se registran en el sistema: el cobro esperado es mensualidad × meses inscritos (mes completo si estuvo al menos un día), sin el mes que cubre la matrícula.'],
+      ...(datos.arancelPorCiclo ? [['Aviso: el arancel está configurado "por ciclo"; este reporte lo trata como mensualidad.']] : []),
+    ]);
+    wsResumen['!cols'] = [{ wch: 34 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    const talleres = ordenarAlfabetico(datos.talleres, (t) => [t.grupo_nombre]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(
+        ['Taller', 'Docente', 'Mensualidad (C$)', 'Alumnos', 'Mensualidades a cobrar', 'Cubiertos por matrícula', 'Cobro esperado (C$)', 'Altas', 'Bajas'],
+        talleres.map((t) => [
+          t.grupo_nombre + (t.eliminado ? ' (eliminado)' : ''),
+          t.profesor_nombre,
+          t.mensualidad,
+          t.alumnos,
+          t.mesesCobrables,
+          t.mesesMatricula,
+          t.cobroEsperado,
+          t.altas,
+          t.bajas,
+        ]),
+        [30, 26, 16, 10, 20, 20, 18, 8, 8]
+      ),
+      'Cobro por Taller'
+    );
+
+    const detalle = ordenarAlfabetico(datos.detalle, (d) => [d.grupo_nombre, d.apellido, d.nombre]);
+    const textoMes = { COBRABLE: 'Cobrar', MATRICULA: 'Matrícula', INACTIVO: '—' } as const;
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(
+        [
+          'Taller',
+          'Apellido',
+          'Nombre',
+          'Grado',
+          ...meses.map(etiquetaMes),
+          'Mensualidad (C$)',
+          'Meses a cobrar',
+          'Cobro esperado (C$)',
+          'Inscrito al cierre',
+          'Sesiones cerradas',
+          'Ausencias',
+          'Justificadas',
+          '% Asistencia',
+        ],
+        detalle.map((d) => [
+          d.grupo_nombre,
+          d.apellido,
+          d.nombre,
+          d.grado || 'Sin grado',
+          ...d.meses.map((m) => textoMes[m.estado]),
+          d.mensualidad,
+          d.mesesCobrables,
+          d.cobroEsperado,
+          d.activoAlCierre ? 'Sí' : 'No',
+          d.sesionesCerradas,
+          d.ausencias,
+          d.justificadas,
+          d.porcentajeAsistencia === null ? 'Sin datos' : d.porcentajeAsistencia,
+        ]),
+        [26, 20, 20, 12, ...meses.map(() => 12), 16, 14, 18, 16, 16, 10, 12, 12]
+      ),
+      'Detalle por Alumno'
+    );
+
+    const movimientos = [...datos.altas, ...datos.bajas].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(
+        ['Fecha', 'Movimiento', 'Alumno', 'Taller', 'Motivo'],
+        movimientos.map((m) => [
+          fecha(m.fecha),
+          TIPOS[m.tipo] || m.tipo,
+          m.estudiante_nombre || m.estudiante_id,
+          m.grupo_id ? m.grupo_nombre || 'Taller' : 'Todos sus talleres',
+          m.motivo || '',
+        ]),
+        [14, 20, 30, 28, 50]
+      ),
+      'Altas y Bajas'
+    );
+
+    const matriculas = [...datos.matriculas].sort((a, b) => a.fecha_pago.localeCompare(b.fecha_pago));
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(
+        ['Fecha de pago', 'Código', 'Trámite', 'Alumno', 'Taller', 'Recibo', 'Método', 'Monto (C$)'],
+        matriculas.map((m) => [
+          fecha(m.fecha_pago),
+          m.codigo_solicitud,
+          m.tipo_tramite === 'RENOVACION_ANUAL' ? 'Renovación' : 'Nueva matrícula',
+          m.alumno,
+          m.grupo_nombre,
+          m.numero_recibo_caja || '',
+          m.metodo_pago || '',
+          m.monto,
+        ]),
+        [14, 16, 16, 30, 28, 16, 14, 12]
+      ),
+      'Matrículas'
+    );
+
+    const nombreArchivo = corte.nombre.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
+    XLSX.writeFile(wb, `Corte_${nombreArchivo}_${fechaLocalISO()}.xlsx`);
   }
 
   /**

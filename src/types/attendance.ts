@@ -174,6 +174,105 @@ export interface DiaNoLectivo {
   creado_en: string;
 }
 
+/** Periodo de corte (Configuración → Cortes). Fechas YYYY-MM-DD. */
+export interface CorteBimestral {
+  id: string;
+  nombre: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  creado_en: string;
+}
+
+export type TipoMovimiento = 'ALTA_TALLER' | 'BAJA_TALLER' | 'BAJA_ALUMNO' | 'REACTIVACION_ALUMNO';
+
+/** Bitácora de altas y bajas (solo inserción). Base del cálculo de meses activos en los cortes. */
+export interface MovimientoInscripcion {
+  id: string;
+  tipo: TipoMovimiento;
+  estudiante_id: string;
+  grupo_id?: string | null;
+  estudiante_nombre?: string;
+  grupo_nombre?: string;
+  fecha: string; // YYYY-MM-DD (fecha local)
+  motivo?: string | null;
+  registrado_por?: string | null;
+  creado_en: string;
+}
+
+/** Estado de un mes en el corte: se cobra, lo cubre la matrícula, o el alumno no estuvo inscrito */
+export type EstadoMesCorte = 'COBRABLE' | 'MATRICULA' | 'INACTIVO';
+
+export interface FilaCorteAlumno {
+  estudiante_id: string;
+  nombre: string;
+  apellido: string;
+  grado?: string;
+  grupo_id: string;
+  grupo_nombre: string;
+  mensualidad: number;
+  meses: { mes: string; estado: EstadoMesCorte }[]; // mes = YYYY-MM
+  mesesCobrables: number;
+  mesesMatricula: number;
+  cobroEsperado: number;
+  /** Inscrito en el taller al terminar el corte */
+  activoAlCierre: boolean;
+  sesionesCerradas: number;
+  ausencias: number;
+  justificadas: number;
+  /** % de asistencia en las sesiones cerradas del corte; null si no hay datos */
+  porcentajeAsistencia: number | null;
+}
+
+export interface FilaCorteTaller {
+  grupo_id: string;
+  grupo_nombre: string;
+  profesor_nombre: string;
+  eliminado: boolean;
+  mensualidad: number;
+  alumnos: number;
+  mesesCobrables: number;
+  mesesMatricula: number;
+  cobroEsperado: number;
+  altas: number;
+  bajas: number;
+}
+
+export interface MatriculaCorte {
+  id: string;
+  codigo_solicitud: string;
+  tipo_tramite?: TipoTramiteMatricula;
+  alumno: string;
+  grupo_id: string;
+  grupo_nombre: string;
+  fecha_pago: string; // YYYY-MM-DD local
+  monto: number;
+  numero_recibo_caja?: string;
+  metodo_pago?: string;
+}
+
+export interface ResultadoCorte {
+  corte: CorteBimestral;
+  meses: string[];
+  talleres: FilaCorteTaller[];
+  detalle: FilaCorteAlumno[];
+  altas: MovimientoInscripcion[];
+  bajas: MovimientoInscripcion[];
+  matriculas: MatriculaCorte[];
+  resumen: {
+    talleres: number;
+    alumnosActivos: number;
+    mesesCobrables: number;
+    mesesMatricula: number;
+    cobroEsperado: number;
+    matriculasCobradas: number;
+    montoMatriculas: number;
+    altas: number;
+    bajas: number;
+  };
+  /** true si el arancel se configuró "por ciclo": el reporte lo trata como mensual */
+  arancelPorCiclo: boolean;
+}
+
 export type PeriodoArancel = 'MENSUAL' | 'CICLO';
 
 export interface ConfiguracionSistema {

@@ -12,6 +12,7 @@ import {
   Receipt,
   GraduationCap,
   CalendarOff,
+  CalendarRange,
   Pencil,
   Trash2,
   Eye,
@@ -37,10 +38,11 @@ import { ContractTemplateTab } from './ContractTemplateTab';
 import { SalonesTab } from './SalonesTab';
 import { GradosTab } from './GradosTab';
 import { DiasNoLectivosTab } from './DiasNoLectivosTab';
+import { CortesBimestralesTab } from './CortesBimestralesTab';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
-type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'dias' | 'contrato';
+type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'dias' | 'cortes' | 'contrato';
 
 interface SettingsViewProps {
   /** Abre directamente el formulario de nuevo usuario con este rol (p. ej. desde Docentes) */
@@ -359,7 +361,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
             Configuración del Sistema
           </h1>
           <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Administración de cuentas de usuario, roles, reglas institucionales, salones, grados, días no lectivos y contrato de matrícula.
+            Administración de cuentas de usuario, roles, reglas institucionales, salones, grados, días no lectivos, cortes bimestrales y contrato de matrícula.
           </p>
         </div>
 
@@ -424,6 +426,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
           >
             <CalendarOff className="w-3.5 h-3.5" />
             <span>Días no lectivos</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('cortes')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'cortes'
+                ? 'bg-white dark:bg-[#141A23] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CalendarRange className="w-3.5 h-3.5" />
+            <span>Cortes</span>
           </button>
           <button
             type="button"
@@ -849,6 +863,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* TAB: DÍAS NO LECTIVOS (feriados y vacaciones) */}
       {activeTab === 'dias' && <DiasNoLectivosTab />}
+
+      {/* TAB: CORTES BIMESTRALES */}
+      {activeTab === 'cortes' && <CortesBimestralesTab />}
 
       {/* TAB 3: PLANTILLA DE CONTRATO */}
       {activeTab === 'contrato' && <ContractTemplateTab />}
