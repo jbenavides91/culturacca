@@ -159,6 +159,21 @@ export interface Anotacion {
   editado_por_nombre?: string;
 }
 
+export type TipoDiaNoLectivo = 'FERIADO' | 'VACACIONES' | 'OTRO';
+
+/**
+ * Día o rango sin clases (Configuración → Días no lectivos). No se generan sesiones en esas fechas.
+ * Un solo día: fecha_inicio === fecha_fin. Fechas en formato YYYY-MM-DD.
+ */
+export interface DiaNoLectivo {
+  id: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  motivo: string;
+  tipo: TipoDiaNoLectivo;
+  creado_en: string;
+}
+
 export type PeriodoArancel = 'MENSUAL' | 'CICLO';
 
 export interface ConfiguracionSistema {

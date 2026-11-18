@@ -3,6 +3,7 @@ import {
   Anotacion,
   Asistencia,
   ConfiguracionSistema,
+  DiaNoLectivo,
   EstadoEstudiante,
   EstadoMatricula,
   EstadoPagoAnual,
@@ -38,6 +39,7 @@ const STORAGE_KEYS = {
   ANECDOTARIO: 'aa_anecdotario',
   SALONES: 'aa_salones',
   GRADOS: 'aa_grados',
+  DIAS_NO_LECTIVOS: 'aa_dias_no_lectivos',
 } as const satisfies Record<string, StorageKey>;
 
 // Listeners for data updates
@@ -338,11 +340,14 @@ class StorageService {
     const fechas: string[] = [];
     const fin = aUTC(grupo.fecha_fin_ciclo);
     const cursor = aUTC(grupo.fecha_inicio_ciclo);
+    const noLectivos = this.getDiasNoLectivos();
     while (cursor <= fin) {
       // getUTCDay: 0=Domingo ... 6=Sábado → 1=Lunes ... 7=Domingo
       const dayOfWeek = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay();
-      if (grupo.dias_semana.includes(dayOfWeek)) {
-        fechas.push(cursor.toISOString().slice(0, 10));
+      const fecha = cursor.toISOString().slice(0, 10);
+      // Feriados y vacaciones (Configuración → Días no lectivos) no generan clase
+      if (grupo.dias_semana.includes(dayOfWeek) && !this.diaNoLectivoEn(noLectivos, fecha)) {
+        fechas.push(fecha);
       }
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
@@ -1602,6 +1607,146 @@ class StorageService {
     this.remove(STORAGE_KEYS.GRADOS, [id]);
     cacheService.invalidateByTag('grados');
     notifyDataChange();
+  }
+
+  // --- DÍAS NO LECTIVOS (feriados, vacaciones; no generan sesiones) ---
+
+  getDiasNoLectivos(): DiaNoLectivo[] {
+    const cached = cacheService.get<DiaNoLectivo[]>('dias_no_lectivos_all');
+    if (cached) return cached;
+    const data = this.read<DiaNoLectivo[]>(STORAGE_KEYS.DIAS_NO_LECTIVOS, [])
+      .map((d) => ({
+        ...d,
+        fecha_inicio: String(d.fecha_inicio).slice(0, 10),
+        fecha_fin: String(d.fecha_fin || d.fecha_inicio).slice(0, 10),
+      }))
+      .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio) || a.fecha_fin.localeCompare(b.fecha_fin));
+    cacheService.set('dias_no_lectivos_all', data, 60000, ['dias_no_lectivos']);
+    return data;
+  }
+
+  private diaNoLectivoEn(lista: DiaNoLectivo[], fecha: string): DiaNoLectivo | undefined {
+    return lista.find((d) => d.fecha_inicio <= fecha && fecha <= d.fecha_fin);
+  }
+
+  /** Día no lectivo que cubre una fecha YYYY-MM-DD (o undefined si hay clases ese día) */
+  diaNoLectivoDe(fecha: string): DiaNoLectivo | undefined {
+    return this.diaNoLectivoEn(this.getDiasNoLectivos(), fecha);
+  }
+
+  esDiaNoLectivo(fecha: string): boolean {
+    return !!this.diaNoLectivoDe(fecha);
+  }
+
+  private validarDiaNoLectivo(datos: Pick<DiaNoLectivo, 'fecha_inicio' | 'fecha_fin' | 'motivo' | 'tipo'>) {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const motivo = (datos.motivo || '').trim();
+    if (!motivo) throw new Error('Indica el motivo (por ejemplo: Feriado nacional, Vacaciones de medio año).');
+    if (motivo.length > 120) throw new Error('El motivo no puede superar los 120 caracteres.');
+    if (!iso.test(datos.fecha_inicio)) throw new Error('Indica una fecha de inicio válida.');
+    const fecha_fin = datos.fecha_fin || datos.fecha_inicio;
+    if (!iso.test(fecha_fin)) throw new Error('Indica una fecha final válida.');
+    if (fecha_fin < datos.fecha_inicio) throw new Error('La fecha final no puede ser anterior a la inicial.');
+    const tipo = (['FERIADO', 'VACACIONES', 'OTRO'] as const).includes(datos.tipo) ? datos.tipo : 'OTRO';
+    return { fecha_inicio: datos.fecha_inicio, fecha_fin, motivo, tipo };
+  }
+
+  /**
+   * Vuelve a calcular el calendario de todos los talleres con los días no lectivos actuales.
+   * Agrega las clases que faltan y quita las que caen en días no lectivos, salvo cerradas,
+   * con asistencia o extraordinarias (misma regla que reconciliarSesiones).
+   */
+  reaplicarCalendarioATodos(): { sesionesAgregadas: number; sesionesEliminadas: number; sesionesConservadas: number } {
+    cacheService.invalidateByTag('dias_no_lectivos');
+    const total = { sesionesAgregadas: 0, sesionesEliminadas: 0, sesionesConservadas: 0 };
+    for (const grupo of this.getGrupos()) {
+      if (!grupo.fecha_inicio_ciclo || !grupo.fecha_fin_ciclo) continue;
+      const r = this.reconciliarSesiones(grupo);
+      total.sesionesAgregadas += r.sesionesAgregadas;
+      total.sesionesEliminadas += r.sesionesEliminadas;
+      total.sesionesConservadas += r.sesionesConservadas;
+    }
+    notifyDataChange();
+    return total;
+  }
+
+  crearDiaNoLectivo(datos: Pick<DiaNoLectivo, 'fecha_inicio' | 'fecha_fin' | 'motivo' | 'tipo'>) {
+    const nuevo: DiaNoLectivo = {
+      id: `dnl-${nuevoId()}`,
+      ...this.validarDiaNoLectivo(datos),
+      creado_en: new Date().toISOString(),
+    };
+    this.write(STORAGE_KEYS.DIAS_NO_LECTIVOS, [nuevo]);
+    return { dia: nuevo, ...this.reaplicarCalendarioATodos() };
+  }
+
+  actualizarDiaNoLectivo(id: string, datos: Pick<DiaNoLectivo, 'fecha_inicio' | 'fecha_fin' | 'motivo' | 'tipo'>) {
+    const actual = this.getDiasNoLectivos().find((d) => d.id === id);
+    if (!actual) throw new Error('Día no lectivo no encontrado.');
+    const actualizado: DiaNoLectivo = { ...actual, ...this.validarDiaNoLectivo(datos), id };
+    this.write(STORAGE_KEYS.DIAS_NO_LECTIVOS, [actualizado]);
+    return { dia: actualizado, ...this.reaplicarCalendarioATodos() };
+  }
+
+  /** Elimina un día no lectivo; las clases de esas fechas se vuelven a generar */
+  eliminarDiaNoLectivo(id: string) {
+    this.remove(STORAGE_KEYS.DIAS_NO_LECTIVOS, [id]);
+    return this.reaplicarCalendarioATodos();
+  }
+
+  /** Feriados de Nicaragua de un año (nacionales, Santo Domingo en Managua y la Gritería) */
+  feriadosNicaragua(anio: number): { fecha: string; motivo: string }[] {
+    // Domingo de Pascua (algoritmo de Meeus/Jones/Butcher, calendario gregoriano)
+    const a = anio % 19;
+    const b = Math.floor(anio / 100);
+    const c = anio % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mes = Math.floor((h + l - 7 * m + 114) / 31);
+    const dia = ((h + l - 7 * m + 114) % 31) + 1;
+    const pascua = Date.UTC(anio, mes - 1, dia);
+    const menosDias = (n: number) => new Date(pascua - n * 86400000).toISOString().slice(0, 10);
+    const fija = (mm: number, dd: number) => `${anio}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+
+    return [
+      { fecha: fija(1, 1), motivo: 'Año Nuevo' },
+      { fecha: menosDias(3), motivo: 'Jueves Santo' },
+      { fecha: menosDias(2), motivo: 'Viernes Santo' },
+      { fecha: fija(5, 1), motivo: 'Día Internacional del Trabajo' },
+      { fecha: fija(5, 30), motivo: 'Día de las Madres' },
+      { fecha: fija(7, 19), motivo: 'Aniversario de la Revolución' },
+      { fecha: fija(8, 1), motivo: 'Santo Domingo de Guzmán (bajada)' },
+      { fecha: fija(8, 10), motivo: 'Santo Domingo de Guzmán (subida)' },
+      { fecha: fija(9, 14), motivo: 'Batalla de San Jacinto' },
+      { fecha: fija(9, 15), motivo: 'Día de la Independencia' },
+      { fecha: fija(12, 7), motivo: 'La Gritería' },
+      { fecha: fija(12, 8), motivo: 'Inmaculada Concepción (Purísima)' },
+      { fecha: fija(12, 25), motivo: 'Navidad' },
+    ];
+  }
+
+  /** Agrega los feriados de Nicaragua del año que todavía no estén cubiertos por el catálogo */
+  cargarFeriadosNicaragua(anio: number) {
+    const existentes = this.getDiasNoLectivos();
+    const nuevos: DiaNoLectivo[] = this.feriadosNicaragua(anio)
+      .filter((fer) => !this.diaNoLectivoEn(existentes, fer.fecha))
+      .map((fer) => ({
+        id: `dnl-${fer.fecha}`,
+        fecha_inicio: fer.fecha,
+        fecha_fin: fer.fecha,
+        motivo: fer.motivo,
+        tipo: 'FERIADO',
+        creado_en: new Date().toISOString(),
+      }));
+    if (nuevos.length > 0) this.write(STORAGE_KEYS.DIAS_NO_LECTIVOS, nuevos);
+    return { agregados: nuevos.length, ...this.reaplicarCalendarioATodos() };
   }
 
   /**

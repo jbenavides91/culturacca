@@ -24,7 +24,8 @@ export type StorageKey =
   | 'aa_matriculas'
   | 'aa_anecdotario'
   | 'aa_salones'
-  | 'aa_grados';
+  | 'aa_grados'
+  | 'aa_dias_no_lectivos';
 
 interface TableDef {
   table: string;
@@ -127,6 +128,12 @@ export const TABLES: Record<StorageKey, TableDef> = {
     columns: ['id', 'nombre', 'orden', 'activo', 'creado_en'],
     tags: ['grados'],
     defaults: { orden: 0, activo: true },
+  },
+  aa_dias_no_lectivos: {
+    table: 'dias_no_lectivos',
+    columns: ['id', 'fecha_inicio', 'fecha_fin', 'motivo', 'tipo', 'creado_en'],
+    tags: ['dias_no_lectivos', 'sesiones'],
+    defaults: { tipo: 'OTRO' },
   },
 };
 

@@ -150,11 +150,14 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       const gSesiones = storageService.getSesionesByGrupo(activeGId);
       setSesiones(gSesiones);
 
-      // Por defecto: la sesión de hoy; si no hay, la próxima; si no, la última
+      // Por defecto: la sesión de hoy; si hoy no hay clase, la última pasada sin cerrar
+      // (la futura estaría bloqueada); si no, la próxima; si no, la última
       if (!selectedSesionId || !gSesiones.some((s) => s.id === selectedSesionId)) {
         const hoy = fechaLocalISO();
+        const pendientesPasadas = gSesiones.filter((s) => s.fecha < hoy && !s.cerrada);
         const porDefecto =
           gSesiones.find((s) => s.fecha === hoy) ||
+          pendientesPasadas[pendientesPasadas.length - 1] ||
           gSesiones.find((s) => s.fecha > hoy) ||
           gSesiones[gSesiones.length - 1];
         if (porDefecto) {
@@ -231,6 +234,11 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       setSelectedSesionId(sesiones[currentSesionIndex + 1].id);
     }
   };
+
+  // Hoy sin clase de este taller (día que no es de taller, feriado o vacaciones)
+  const hoyStr = fechaLocalISO();
+  const hayClaseHoy = sesiones.some((s) => s.fecha === hoyStr);
+  const noLectivoHoy = storageService.diaNoLectivoDe(hoyStr);
 
   // Sesión cuya fecha aún no llega: no se puede tomar lista ni cerrar
   const sesionFutura = !!activeSesion && storageService.esSesionFutura(activeSesion);
@@ -503,6 +511,21 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
         </div>
       )}
 
+      {/* Aviso: hoy no hay clase de este taller */}
+      {activeGrupo && activeSesion && !hayClaseHoy && (
+        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 p-3 rounded-xl text-blue-900 dark:text-blue-200 text-[11px] sm:text-xs flex items-start gap-2">
+          <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-px" />
+          <span>
+            {noLectivoHoy
+              ? `Hoy es día no lectivo (${noLectivoHoy.motivo}). `
+              : 'Hoy no hay clase de este taller. '}
+            {activeSesion.fecha < hoyStr && !activeSesion.cerrada
+              ? `Se muestra la última clase pendiente (${activeDateInfo.fullDate}); puedes pasar lista de cualquier clase anterior con ◀ o desde el calendario de clases.`
+              : 'Usa ◀ o el calendario de clases para elegir otra fecha. Para una clase fuera del calendario, crea una sesión extraordinaria.'}
+          </span>
+        </div>
+      )}
+
       {/* Workshop Executive Header Card */}
       <div className="bg-white dark:bg-[#141A23] rounded-2xl p-3.5 sm:p-6 border border-slate-200/80 dark:border-slate-800/80 transition-colors space-y-3 sm:space-y-4">
         {/* Row 1: Workshop Selection & Quick Actions */}
@@ -651,6 +674,14 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                                 {s.extraordinaria && (
                                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
                                     Extra
+                                  </span>
+                                )}
+                                {!s.extraordinaria && storageService.esDiaNoLectivo(s.fecha) && (
+                                  <span
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                    title={storageService.diaNoLectivoDe(s.fecha)?.motivo}
+                                  >
+                                    No lectivo
                                   </span>
                                 )}
                               </p>
