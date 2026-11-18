@@ -26,6 +26,7 @@ import {
   CalendarPlus,
 } from 'lucide-react';
 import { AnecdotarioModal } from '../students/AnecdotarioModal';
+import { SesionExtraordinariaModal } from './SesionExtraordinariaModal';
 import { fechaLocalISO } from '../../utils/fechas';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
@@ -105,11 +106,6 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [anecdotarioStudent, setAnecdotarioStudent] = useState<Estudiante | null>(null);
   const [extraModalOpen, setExtraModalOpen] = useState(false);
-  const [extraFecha, setExtraFecha] = useState('');
-  const [extraHoraInicio, setExtraHoraInicio] = useState('');
-  const [extraHoraFin, setExtraHoraFin] = useState('');
-  const [extraTema, setExtraTema] = useState('');
-  const [extraError, setExtraError] = useState<string | null>(null);
   const [conteoAnotaciones, setConteoAnotaciones] = useState<Map<string, number>>(new Map());
   const [sessionPickerOpen, setSessionPickerOpen] = useState(false);
   const sessionPickerRef = useRef<HTMLDivElement>(null);
@@ -250,35 +246,16 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       (currentProfile.rol === 'PROFESOR' && activeGrupo.profesor_id === currentProfile.id));
 
   const abrirSesionExtra = () => {
-    if (!activeGrupo) return;
-    setExtraFecha(fechaLocalISO());
-    setExtraHoraInicio(activeGrupo.hora_inicio);
-    setExtraHoraFin(activeGrupo.hora_fin);
-    setExtraTema('');
-    setExtraError(null);
-    setExtraModalOpen(true);
+    if (activeGrupo) setExtraModalOpen(true);
   };
 
-  const handleCrearSesionExtra = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeGrupo) return;
-    setExtraError(null);
-    try {
-      const sesion = storageService.agregarSesionExtraordinaria(activeGrupo.id, {
-        fecha: extraFecha,
-        hora_inicio: extraHoraInicio,
-        hora_fin: extraHoraFin,
-        tema: extraTema,
-      });
-      setExtraModalOpen(false);
-      setSelectedSesionId(sesion.id);
-      setFeedbackMessage({
-        type: 'success',
-        text: `Sesión extraordinaria creada para ${formatSessionDate(sesion.fecha).fullDate}.`,
-      });
-    } catch (err: unknown) {
-      setExtraError(err instanceof Error ? err.message : 'No se pudo crear la sesión.');
-    }
+  const handleSesionExtraCreada = (sesion: Sesion) => {
+    setExtraModalOpen(false);
+    setSelectedSesionId(sesion.id);
+    setFeedbackMessage({
+      type: 'success',
+      text: `Sesión extraordinaria creada para ${formatSessionDate(sesion.fecha).fullDate}.`,
+    });
   };
 
   const avisarSesionFutura = () =>
@@ -1423,83 +1400,12 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
       {/* Modals */}
       {extraModalOpen && activeGrupo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-[#1B222D] rounded-2xl shadow-xl max-w-sm w-full overflow-hidden border border-[#E7EAF0] dark:border-[#2B3442] text-[#172033] dark:text-[#F1F5F9]">
-            <div className="px-5 py-4 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarPlus className="w-4 h-4 text-violet-500" />
-                <h3 className="text-sm font-bold">Sesión extraordinaria</h3>
-              </div>
-              <button onClick={() => setExtraModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer" aria-label="Cerrar">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <form onSubmit={handleCrearSesionExtra} className="p-3.5 sm:p-5 space-y-3 text-xs">
-              <p className="text-[#667085] dark:text-[#94A3B8] leading-relaxed">
-                Clase de <strong>{activeGrupo.nombre}</strong> fuera de sus días habituales (reposición o clase extra).
-                Se conserva aunque cambien las fechas o los días del taller.
-              </p>
-              {extraError && (
-                <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{extraError}</span>
-                </div>
-              )}
-              <div>
-                <label className="block font-semibold mb-1">Fecha</label>
-                <input
-                  type="date"
-                  required
-                  value={extraFecha}
-                  onChange={(e) => setExtraFecha(e.target.value)}
-                  className="w-full rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#151A22] p-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-semibold mb-1">Hora inicio</label>
-                  <input
-                    type="time"
-                    required
-                    value={extraHoraInicio}
-                    onChange={(e) => setExtraHoraInicio(e.target.value)}
-                    className="w-full rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#151A22] p-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Hora fin</label>
-                  <input
-                    type="time"
-                    required
-                    value={extraHoraFin}
-                    onChange={(e) => setExtraHoraFin(e.target.value)}
-                    className="w-full rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#151A22] p-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">
-                  Tema <span className="text-[#94A3B8] font-normal">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={extraTema}
-                  onChange={(e) => setExtraTema(e.target.value)}
-                  placeholder="Clase extraordinaria"
-                  className="w-full rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#151A22] p-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setExtraModalOpen(false)} className="px-3 py-1.5 font-semibold text-[#667085] cursor-pointer">
-                  Cancelar
-                </button>
-                <button type="submit" className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-bold cursor-pointer">
-                  Crear sesión
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <SesionExtraordinariaModal
+          grupo={activeGrupo}
+          onClose={() => setExtraModalOpen(false)}
+          onCreada={handleSesionExtraCreada}
+          puedeQuitar={currentProfile.rol === 'ADMIN'}
+        />
       )}
 
       {anecdotarioStudent && (

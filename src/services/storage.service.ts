@@ -454,6 +454,33 @@ class StorageService {
     return sesion;
   }
 
+  /**
+   * Quita una sesión extraordinaria creada por error. Solo si no está cerrada y no tiene asistencia.
+   */
+  eliminarSesionExtraordinaria(sesionId: string): void {
+    const sesion = this.getSesionById(sesionId);
+    if (!sesion) throw new Error('Sesión no encontrada.');
+    if (!sesion.extraordinaria) throw new Error('Solo se pueden quitar sesiones extraordinarias.');
+    if (sesion.cerrada) throw new Error('La sesión ya está cerrada: no se puede quitar.');
+    if (this.getAsistencias().some((a) => a.sesion_id === sesionId)) {
+      throw new Error('La sesión ya tiene asistencia registrada: no se puede quitar.');
+    }
+    this.remove(STORAGE_KEYS.SESIONES, [sesionId]);
+    cacheService.invalidateByTag('sesiones');
+    cacheService.invalidateByTag('alertas');
+    notifyDataChange();
+  }
+
+  /** Es día de clase normal del taller: uno de sus días de la semana, dentro de un corte y no lectivo-libre */
+  esDiaDeClaseRegular(grupo: Pick<Grupo, 'dias_semana'> & { creado_en?: string }, fecha: string): boolean {
+    return this.generarFechasSesiones(grupo).includes(fecha);
+  }
+
+  /** La fecha cae dentro de algún corte registrado */
+  estaEnAlgunCorte(fecha: string): boolean {
+    return this.getCortes().some((c) => c.fecha_inicio <= fecha && fecha <= c.fecha_fin);
+  }
+
   private construirSesion(grupo: Grupo, fecha: string): Sesion {
     return {
       id: `ses-${grupo.id}-${fecha}`,

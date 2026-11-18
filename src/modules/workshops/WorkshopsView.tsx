@@ -14,10 +14,12 @@ import {
   LayoutGrid,
   List,
   Search,
+  CalendarPlus,
 } from 'lucide-react';
 import { Grupo, Perfil, Salon } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { EnrollStudentsModal } from './EnrollStudentsModal';
+import { SesionExtraordinariaModal, fechaLargaSesion } from '../attendance/SesionExtraordinariaModal';
 import { SalonSelect } from './SalonSelect';
 import { VistaPreviaSesiones, contarSesionesPrevistas } from './VistaPreviaSesiones';
 import { arancelDeGrupo, arancelGeneral, etiquetaPeriodo, formatearMonto } from '../../utils/arancel';
@@ -100,6 +102,8 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
 
   // Delete Workshop state
   const [grupoAEliminar, setGrupoAEliminar] = useState<Grupo | null>(null);
+  // Sesión extraordinaria (solo ADMIN)
+  const [grupoSesionExtra, setGrupoSesionExtra] = useState<Grupo | null>(null);
   const [confirmNombreEliminar, setConfirmNombreEliminar] = useState('');
 
   // Form states for new workshop
@@ -362,6 +366,15 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
             >
               <UserPlus className="w-3.5 h-3.5" />
               {!compacto && <span>Alumnos</span>}
+            </button>
+            <button
+              onClick={() => setGrupoSesionExtra(g)}
+              className={`${base} text-violet-600 dark:text-violet-400 hover:text-violet-700 hover:bg-violet-50/60 dark:hover:bg-violet-950/30`}
+              title="Agregar una sesión extraordinaria (clase fuera de los días habituales)"
+              aria-label={`Sesión extraordinaria del taller ${g.nombre}`}
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              {!compacto && <span>Sesión extra</span>}
             </button>
           </div>
         )}
@@ -696,6 +709,11 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                     <span>Avance</span>
                     <span className="font-mono text-slate-600 dark:text-slate-300">
                       {closedCount} de {sesiones.length} sesiones
+                      {sesiones.some((s) => s.extraordinaria) && (
+                        <span className="ml-1.5 font-sans text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300">
+                          {sesiones.filter((s) => s.extraordinaria).length} extra
+                        </span>
+                      )}
                     </span>
                   </div>
                   <BarraAvance pct={pct} />
@@ -1034,6 +1052,22 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal: Sesión extraordinaria (solo ADMIN) */}
+      {grupoSesionExtra && currentProfile.rol === 'ADMIN' && (
+        <SesionExtraordinariaModal
+          grupo={grupoSesionExtra}
+          puedeQuitar
+          onClose={() => setGrupoSesionExtra(null)}
+          onCreada={(sesion) => {
+            setToastMessage(
+              `Sesión extraordinaria de "${grupoSesionExtra.nombre}" creada para el ${fechaLargaSesion(sesion.fecha)} (${sesion.hora_inicio}–${sesion.hora_fin}).`
+            );
+            setGrupoSesionExtra(null);
+            loadData();
+          }}
+        />
       )}
 
       {/* Modal: Eliminar Taller */}
