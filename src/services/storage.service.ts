@@ -41,7 +41,7 @@ import {
   Tutor,
 } from '../types/attendance';
 import { cacheService } from './cache.service';
-import { notificationService } from './notification.service';
+import { notificationService, type ResultadoAvisos } from './notification.service';
 import { supabase } from './supabase.client';
 import { StorageKey, syncStore, TABLES } from './supabase.sync';
 import { fechaLocalISO, fechaPagoLocal } from '../utils/fechas';
@@ -1406,82 +1406,36 @@ class StorageService {
   }
 
   /**
-   * Cierre atómico de sesión con disparo de notificaciones automáticas a tutores de ausentes
+   * Cierra la sesión y pide al servidor (Edge Function `notificar-asistencia`) los avisos a los
+   * tutores de los ausentes. Un fallo del correo no reabre la sesión: se devuelve en `avisos.error`.
    */
-  async cerrarSesion(
-    sesionId: string,
-    registradoPorNombre: string = 'Profesor'
-  ): Promise<{
-    sesion: Sesion;
-    notificacionesEnviadas: number;
-    detalles: string[];
-  }> {
+  async cerrarSesion(sesionId: string): Promise<{ sesion: Sesion; avisos: ResultadoAvisos }> {
     this.asegurarSesionNoFutura(sesionId);
     const sesiones = this.getSesiones();
     const sesionIdx = sesiones.findIndex((s) => s.id === sesionId);
     if (sesionIdx < 0) throw new Error('Sesión no encontrada');
 
     const sesion = sesiones[sesionIdx];
-    const grupo = this.getGrupoById(sesion.grupo_id);
-    const ahora = new Date().toISOString();
-
-    // Actualizar estado de la sesión
-    sesiones[sesionIdx] = {
-      ...sesion,
-      cerrada: true,
-      fecha_cierre: ahora,
-    };
-    this.write(STORAGE_KEYS.SESIONES, sesiones);
-
-    // Obtener todas las asistencias de esta sesión
-    const asistencias = this.getAsistenciasBySesion(sesionId);
-    const estudiantes = this.getEstudiantes();
-    const tutores = this.getTutores();
-
-    const ausentes = asistencias.filter((a) => a.estatus === 'AUSENTE');
-    const logs = this.read<LogNotificacion[]>(STORAGE_KEYS.LOGS, []);
-    let notificacionesEnviadas = 0;
-    const detalles: string[] = [];
-
-    // Enviar correos a cada tutor de alumno ausente
-    for (const asistencia of ausentes) {
-      const estudiante = estudiantes.find((e) => e.id === asistencia.estudiante_id);
-      if (!estudiante) continue;
-      const tutor = tutores.find((t) => t.id === estudiante.tutor_id);
-      if (!tutor) continue;
-
-      try {
-        const notifResult = await notificationService.dispatchNotification({
-          asistenciaId: asistencia.id,
-          estudianteId: estudiante.id,
-          estudianteNombre: `${estudiante.nombre} ${estudiante.apellido}`,
-          tutorId: tutor.id,
-          tutorEmail: tutor.email,
-          tutorNombre: tutor.nombre,
-          tallerNombre: grupo?.nombre || 'Taller Artístico',
-          fechaSesion: sesion.fecha,
-          tipo: 'INICIAL',
-        });
-
-        logs.push(notifResult.log);
-        notificacionesEnviadas++;
-        detalles.push(`Aviso enviado a ${tutor.nombre} (${tutor.email}) por ${estudiante.nombre}`);
-      } catch (e: unknown) {
-        console.error('Error al despachar notificación:', e);
-      }
-    }
-
-    this.write(STORAGE_KEYS.LOGS, logs);
+    const cerrada: Sesion = { ...sesion, cerrada: true, fecha_cierre: new Date().toISOString() };
+    this.write(STORAGE_KEYS.SESIONES, [cerrada]);
     cacheService.invalidateByTag('sesiones');
     cacheService.invalidateByTag('asistencias');
     cacheService.invalidateByTag('alertas');
+
+    let avisos: ResultadoAvisos;
+    try {
+      avisos = await notificationService.notificarAsistencia({ tipo: 'INICIAL', sesion_id: sesionId });
+    } catch (e: unknown) {
+      avisos = {
+        enviados: 0,
+        errores: 1,
+        omitidos: [],
+        error: e instanceof Error ? e.message : 'No se pudieron enviar los avisos.',
+      };
+    }
     cacheService.invalidateByTag('logs');
 
-    return {
-      sesion: sesiones[sesionIdx],
-      notificacionesEnviadas,
-      detalles,
-    };
+    return { sesion: cerrada, avisos };
   }
 
   /**
@@ -1492,7 +1446,14 @@ class StorageService {
     nuevoEstatus: EstatusAsistencia,
     motivoRectificacion: string,
     registradoPor: string = 'prof-01'
-  ): Promise<{ asistencia: Asistencia; notificacionEnviada: boolean; tutorEmail?: string; tutorNombre?: string }> {
+  ): Promise<{
+    asistencia: Asistencia;
+    notificacionEnviada: boolean;
+    tutorEmail?: string;
+    tutorNombre?: string;
+    /** Resultado del aviso al tutor (solo cuando una falta pasó a Presente o Justificado) */
+    avisos?: ResultadoAvisos;
+  }> {
     const asistencias = this.getAsistencias();
     let idx = -1;
 
@@ -1538,52 +1499,41 @@ class StorageService {
     asistencias[idx] = actualizada;
     this.write(STORAGE_KEYS.ASISTENCIAS, asistencias);
 
-    let notificacionEnviada = false;
+    cacheService.invalidateByTag('asistencias');
+    cacheService.invalidateByTag('alertas');
+
+    let avisos: ResultadoAvisos | undefined;
     let tutorEmailFound: string | undefined;
     let tutorNombreFound: string | undefined;
 
-    // Si antes era AUSENTE y ahora fue rectificado a PRESENTE o JUSTIFICADO, enviar correo de rectificación
+    // Si era AUSENTE y pasó a PRESENTE o JUSTIFICADO, el servidor avisa al tutor de la corrección
     if (estatusPrevio === 'AUSENTE' && (nuevoEstatus === 'PRESENTE' || nuevoEstatus === 'JUSTIFICADO')) {
-      const sesion = this.getSesionById(actualizada.sesion_id);
-      const grupo = sesion ? this.getGrupoById(sesion.grupo_id) : undefined;
       const estudiante = this.getEstudiantes().find((e) => e.id === actualizada.estudiante_id);
       const tutor = estudiante ? this.getTutorById(estudiante.tutor_id) : undefined;
-
-      if (sesion && estudiante && tutor) {
-        tutorEmailFound = tutor.email;
-        tutorNombreFound = tutor.nombre;
-
-        const notifResult = await notificationService.dispatchNotification({
-          asistenciaId: actualizada.id,
-          estudianteId: estudiante.id,
-          estudianteNombre: `${estudiante.nombre} ${estudiante.apellido}`,
-          tutorId: tutor.id,
-          tutorEmail: tutor.email,
-          tutorNombre: tutor.nombre,
-          tallerNombre: grupo?.nombre || 'Taller Artístico',
-          fechaSesion: sesion.fecha,
+      tutorEmailFound = tutor?.email;
+      tutorNombreFound = tutor?.nombre;
+      try {
+        avisos = await notificationService.notificarAsistencia({
           tipo: 'RECTIFICACION',
-          motivoRectificacion,
-          nuevoEstatus,
-          estatusAnterior: estatusPrevio,
+          asistencia_id: actualizada.id,
         });
-
-        const logs = this.read<LogNotificacion[]>(STORAGE_KEYS.LOGS, []);
-        logs.push(notifResult.log);
-        this.write(STORAGE_KEYS.LOGS, logs);
-        notificacionEnviada = true;
+      } catch (e: unknown) {
+        avisos = {
+          enviados: 0,
+          errores: 1,
+          omitidos: [],
+          error: e instanceof Error ? e.message : 'No se pudo enviar el aviso.',
+        };
       }
+      cacheService.invalidateByTag('logs');
     }
-
-    cacheService.invalidateByTag('asistencias');
-    cacheService.invalidateByTag('alertas');
-    cacheService.invalidateByTag('logs');
 
     return {
       asistencia: actualizada,
-      notificacionEnviada,
+      notificacionEnviada: (avisos?.enviados ?? 0) > 0,
       tutorEmail: tutorEmailFound,
       tutorNombre: tutorNombreFound,
+      avisos,
     };
   }
 

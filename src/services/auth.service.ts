@@ -13,14 +13,16 @@ import { supabase } from './supabase.client';
 import { storageService } from './storage.service';
 
 // ---------------------------------------------------------------------------
-// Firebase: SOLO para obtener el token OAuth de Google (Gmail / Calendar).
+// Firebase: SOLO para obtener el token OAuth de Google para Calendar.
 // No define la identidad ni el rol del usuario: eso lo hace Supabase Auth.
+// Los correos (matrícula y avisos de asistencia) salen del servidor con la cuenta
+// institucional, así que no se pide permiso de Gmail.
 // ---------------------------------------------------------------------------
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/gmail.send');
+provider.addScope('https://www.googleapis.com/auth/calendar.events');
 
 let cachedAccessToken: string | null = null;
 let isSigningIn = false;
@@ -210,7 +212,7 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 /**
- * Conecta la cuenta de Google para enviar correos (Gmail) y crear eventos (Calendar).
+ * Conecta la cuenta de Google para crear eventos en su Calendar.
  * NO cambia el usuario ni el rol activo de la app.
  */
 export const signInWithGoogle = async (): Promise<{ user: FirebaseUser; accessToken: string }> => {

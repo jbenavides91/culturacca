@@ -33,6 +33,35 @@ import { OrdenSelector } from '../../components/OrdenSelector';
 
 import { agruparPorMes, estadoSesion, formatSessionDate, sesionPorDefecto } from './sesiones.shared';
 import { SesionesPorMes } from './SesionesPorMes';
+import type { ResultadoAvisos } from '../../services/notification.service';
+
+/** Mensaje para el usuario con el resultado real de los avisos a tutores */
+const mensajeAvisos = (
+  base: string,
+  avisos: ResultadoAvisos,
+  tutorEmail?: string
+): { type: 'success' | 'info' | 'warning'; text: string } => {
+  if (avisos.error && avisos.enviados === 0) {
+    return { type: 'warning', text: `${base} Los avisos a los tutores no se enviaron: ${avisos.error}` };
+  }
+  const partes: string[] = [];
+  if (avisos.enviados > 0) {
+    partes.push(
+      avisos.enviados === 1 && tutorEmail
+        ? `Aviso enviado al tutor (${tutorEmail})`
+        : `${avisos.enviados} aviso${avisos.enviados === 1 ? '' : 's'} enviado${avisos.enviados === 1 ? '' : 's'} a tutores`
+    );
+  }
+  if (avisos.errores > 0) partes.push(`${avisos.errores} con error${avisos.error ? ` (${avisos.error})` : ''}`);
+  const porMotivo = new Map<string, number>();
+  avisos.omitidos.forEach((o) => porMotivo.set(o.motivo, (porMotivo.get(o.motivo) ?? 0) + 1));
+  porMotivo.forEach((n, motivo) => partes.push(`${n} omitido${n === 1 ? '' : 's'}: ${motivo.toLowerCase()}`));
+  if (partes.length === 0) partes.push('No había ausentes a quienes avisar');
+  return {
+    type: avisos.errores > 0 ? 'warning' : avisos.enviados > 0 ? 'success' : 'info',
+    text: `${base} ${partes.join(' · ')}.`,
+  };
+};
 import {
   AlertaEstudiante,
   Asistencia,
@@ -290,17 +319,10 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
       refreshData();
 
-      if (res.notificacionEnviada) {
-        setFeedbackMessage({
-          type: 'success',
-          text: `Asistencia de ${rectifyTargetStudent.nombre} rectificada a ${targetStatus}. Se despachó un correo formal de rectificación al tutor (${res.tutorEmail || 'tutor legal'}).`,
-        });
-      } else {
-        setFeedbackMessage({
-          type: 'info',
-          text: `Asistencia de ${rectifyTargetStudent.nombre} rectificada a ${targetStatus}.`,
-        });
-      }
+      const base = `Asistencia de ${rectifyTargetStudent.nombre} rectificada a ${targetStatus}.`;
+      setFeedbackMessage(
+        res.avisos ? mensajeAvisos(base, res.avisos, res.tutorEmail) : { type: 'info', text: base }
+      );
     } catch (err: unknown) {
       setFeedbackMessage({
         type: 'warning',
@@ -333,14 +355,8 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
   const handleConfirmCloseSession = async () => {
     if (!activeSesion) return;
     try {
-      const result = await storageService.cerrarSesion(
-        activeSesion.id,
-        `${currentProfile.nombre} ${currentProfile.apellido}`
-      );
-      setFeedbackMessage({
-        type: 'success',
-        text: `Lista de asistencia cerrada con éxito. Se despacharon ${result.notificacionesEnviadas} notificaciones a tutores vía correo.`,
-      });
+      const result = await storageService.cerrarSesion(activeSesion.id);
+      setFeedbackMessage(mensajeAvisos('Lista de asistencia cerrada.', result.avisos));
     } catch (err: unknown) {
       setFeedbackMessage({
         type: 'warning',
@@ -357,13 +373,17 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       storageService
         .rectificarAsistencia(activeAsistencia.id, 'JUSTIFICADO', motivo, currentProfile.id)
         .then((res) => {
-          if (res.notificacionEnviada) {
-            setFeedbackMessage({
-              type: 'success',
-              text: 'Inasistencia rectificada como JUSTIFICADA. Notificación enviada al tutor legal.',
-            });
-          }
-        });
+          const base = 'Inasistencia rectificada como JUSTIFICADA.';
+          setFeedbackMessage(
+            res.avisos ? mensajeAvisos(base, res.avisos, res.tutorEmail) : { type: 'info', text: base }
+          );
+        })
+        .catch((err: unknown) =>
+          setFeedbackMessage({
+            type: 'warning',
+            text: err instanceof Error ? err.message : 'Error al procesar la rectificación.',
+          })
+        );
     } else {
       try {
         storageService.upsertAsistencia(
