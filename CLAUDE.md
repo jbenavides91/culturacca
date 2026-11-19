@@ -81,7 +81,7 @@ Legacy teacher records without a login (ids like `prof-…`) no longer exist in 
 
 Workshops are assigned to teachers from the Talleres form (`asignarTallerADocente` also exists in the service, where `''` means unassigned). `crearGrupoConSesiones`/`actualizarGrupo` call `verificarChoqueDocente`, which blocks a teacher from having two workshops with overlapping days and hours (all workshops share the cut calendar, so `sonTalleresEnConflicto` no longer compares dates). The email is optional when creating users: if left empty, an internal address `<username>@usuarios.cultura-cca.local` is generated (`src/utils/correoInterno.ts`, which also defines `USERNAME_REGEX`: lowercase, digits, `._-`, 3-30 chars, no `@`). The UI shows "Sin correo" for those users. The workshop teacher selector lists **only `rol === 'PROFESOR'`** profiles. Roles, usernames and passwords are managed only in Configuración → Usuarios. Firebase (config in `firebase-applet-config.json`) is used only to get a Google OAuth token for Gmail/Calendar; it does not change the active profile.
 
-**Enrollment email (`correo-matricula` Edge Function)** is the only real email channel. When a request is registered (end of `NewEnrollmentWizardModal`, and a renewal in Estudiantes when a tutor email was typed), `storageService.enviarCorreoMatricula(solicitudId)` runs `syncStore.flush()` and invokes the function with **only `solicitud_id`**.
+**Enrollment email (`correo-matricula` Edge Function)** is the only real email channel. When a request is registered (end of `NewEnrollmentWizardModal`, once per request when two workshops were chosen, and a renewal in Estudiantes when a tutor email was typed), `storageService.enviarCorreoMatricula(solicitudId)` runs `syncStore.flush()` and invokes the function with **only `solicitud_id`**.
 - The function (Deno, `verify_jwt: false`, same CORS and session check as `admin-usuarios`; roles ADMIN, MATRICULA, CAJERO) loads the request, its group, the teacher and `configuracion` with the service role, so the recipient and content always come from the DB and it cannot be used as a mail relay.
 - It builds the HTML summary and the signed contract as a PDF (`pdf-lib`, Helvetica/WinAnsi; the `firma_digital_url` PNG is embedded) and sends it over Gmail SMTP `smtp.gmail.com:465` (`denomailer`; Supabase blocks 25/587) from an institutional account.
 - Secrets: `GMAIL_USER`, `GMAIL_APP_PASSWORD` (a Google app password; the account needs 2-step verification) and optional `MAIL_FROM_NAME`. Gmail limits: about 500 messages a day (2,000 on Workspace).
@@ -159,7 +159,7 @@ How it is enforced:
 It skips the target and `excluirGrupoIds`. It returns `enCaja: true` when the clash is with a pending request.
 
 Callers:
-- `inscribirEstudianteEnGrupo`, Talleres → Alumnos (shows "Ocupado" with the reason) and the enrollment wizard. The wizard's cards also block a workshop the student is already enrolled in or already has a pending request for.
+- `inscribirEstudianteEnGrupo`, Talleres → Alumnos (shows "Ocupado" with the reason) and the enrollment wizard. The wizard's cards also block a workshop the student is already enrolled in or already has a pending request for. The wizard accepts up to 2 workshops in one process, blocks a second one that clashes with the first (`sonTalleresEnConflicto`), and creates one request per workshop.
 - `crearSolicitudMatricula` rejects clashes for new and existing students, plus **duplicates** (already enrolled, or already pending in Caja, in the same workshop).
 
 **Cambiar de taller** (ADMIN only; the `ArrowRightLeft` button in Estudiantes, shown when the student has at least one workshop):
@@ -195,7 +195,7 @@ Callers:
 - Colors come from inline `style`: the text uses the color, and the background and border use the same color with hex alpha `1A` / `55`.
 - Shown in:
   - Talleres cards and list (via `datosTaller().ocupacion`);
-  - the enrollment wizard: full workshops are disabled, ALERTA says "Quedan N lugares", and step 3 shows the bar;
+  - the enrollment wizard: full workshops are disabled, ALERTA says "Quedan N lugares", and step 3 shows one bar per chosen workshop;
   - Talleres → Alumnos: a header bar counting the selection; "Cupo completo" blocks checking more, and "Marcar disponibles" stops at the free spots;
   - Caja, on pending requests.
 
