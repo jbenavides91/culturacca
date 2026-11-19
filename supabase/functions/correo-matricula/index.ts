@@ -11,7 +11,10 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'npm:pdf-lib@1.17.1';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+// nodemailer arma el MIME (encabezados plegados y codificados según RFC 2047). No volver a denomailer:
+// cortaba los asuntos largos con tildes dentro del encabezado y el correo llegaba como texto crudo.
+import nodemailer from 'npm:nodemailer@6.9.16';
+import { Buffer } from 'node:buffer';
 
 const ORIGENES_PERMITIDOS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -61,19 +64,25 @@ const PIE_NO_RESPONDER =
   'Este es un correo automático y esta dirección no recibe respuestas. Para cualquier consulta, comuníquese con la coordinación del colegio.';
 const TEXTO_NO_RESPONDER = '\n\nCorreo automático: no responda a este mensaje.';
 const ENCABEZADOS_NO_RESPONDER = { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' };
-/** "Nombre - No responder <cuenta>" (sin paréntesis: en un remitente sin comillas serían un comentario) */
+/** Remitente "Nombre - No responder" (nodemailer codifica el nombre aunque tenga tildes o "–") */
 const remitenteNoResponder = (nombre: string, cuenta: string) => {
   const limpio = nombre.replace(/[<>"()]/g, '').trim();
-  return `${/responder/i.test(limpio) ? limpio : `${limpio} - No responder`} <${cuenta}>`;
+  return { name: /responder/i.test(limpio) ? limpio : `${limpio} - No responder`, address: cuenta };
 };
 
-/**
- * Cierra la conexión SMTP sin lanzar nunca: en denomailer, close() devuelve `void | Promise<void>`
- * (el cliente básico devuelve void), así que `close().catch()` fallaba y tapaba el resultado del envío.
- */
-async function cerrarCliente(cliente: SMTPClient | null | undefined) {
+/** Conexión SMTP con Gmail (465 con TLS; Supabase bloquea 25 y 587) */
+const crearTransporte = (usuario: string, contrasena: string) =>
+  nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: usuario, pass: contrasena },
+  });
+
+/** Cierra la conexión sin lanzar nunca (un fallo al cerrar no debe tapar el resultado del envío) */
+function cerrarTransporte(transporte: { close: () => void } | null | undefined) {
   try {
-    await cliente?.close();
+    transporte?.close();
   } catch {
     // ignorar
   }
@@ -438,34 +447,25 @@ async function manejar(req: Request): Promise<Response> {
       monto: montoNum > 0 ? formatearMonto(montoNum) : '',
     });
 
-    const cliente = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: { username: gmailUser, password: gmailPassword },
-      },
-    });
-    const remitente = remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser);
+    const transporte = crearTransporte(gmailUser, gmailPassword);
     try {
-      await cliente.send({
-        from: remitente,
+      await transporte.sendMail({
+        from: remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser),
         to: destinatario,
         subject: `Matrícula ${codigo} – ${alumno}${taller ? ` · ${taller}` : ''}`,
-        content: `Resumen de la matrícula ${codigo} de ${alumno}. El contrato firmado va adjunto en PDF.${TEXTO_NO_RESPONDER}`,
-        headers: ENCABEZADOS_NO_RESPONDER,
+        text: `Resumen de la matrícula ${codigo} de ${alumno}. El contrato firmado va adjunto en PDF.${TEXTO_NO_RESPONDER}`,
         html,
+        headers: ENCABEZADOS_NO_RESPONDER,
         attachments: [
           {
             filename: `Contrato-${codigo}.pdf`,
+            content: Buffer.from(pdf),
             contentType: 'application/pdf',
-            encoding: 'binary',
-            content: pdf,
           },
         ],
       });
     } finally {
-      await cerrarCliente(cliente);
+      cerrarTransporte(transporte);
     }
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : 'No se pudo enviar el correo.';

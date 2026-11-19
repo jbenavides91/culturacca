@@ -16,7 +16,9 @@
 // Despliegue: MCP deploy_edge_function (name notificar-asistencia, verify_jwt: false).
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+// nodemailer arma el MIME (encabezados plegados y codificados según RFC 2047). No volver a denomailer:
+// cortaba los asuntos largos con tildes dentro del encabezado y el correo llegaba como texto crudo.
+import nodemailer from 'npm:nodemailer@6.9.16';
 
 const ORIGENES_PERMITIDOS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -62,19 +64,27 @@ const PIE_NO_RESPONDER =
   'Este es un correo automático y esta dirección no recibe respuestas. Para cualquier consulta, comuníquese con la coordinación del colegio.';
 const TEXTO_NO_RESPONDER = '\n\nCorreo automático: no responda a este mensaje.';
 const ENCABEZADOS_NO_RESPONDER = { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' };
-/** "Nombre - No responder <cuenta>" (sin paréntesis: en un remitente sin comillas serían un comentario) */
+/** Remitente "Nombre - No responder" (nodemailer codifica el nombre aunque tenga tildes o "–") */
 const remitenteNoResponder = (nombre: string, cuenta: string) => {
   const limpio = nombre.replace(/[<>"()]/g, '').trim();
-  return `${/responder/i.test(limpio) ? limpio : `${limpio} - No responder`} <${cuenta}>`;
+  return { name: /responder/i.test(limpio) ? limpio : `${limpio} - No responder`, address: cuenta };
 };
 
-/**
- * Cierra la conexión SMTP sin lanzar nunca: en denomailer, close() devuelve `void | Promise<void>`
- * (el cliente básico devuelve void), así que `close().catch()` fallaba y tapaba el resultado del envío.
- */
-async function cerrarCliente(cliente: SMTPClient | null | undefined) {
+/** Conexión SMTP con Gmail (465 con TLS; Supabase bloquea 25 y 587) */
+const crearTransporte = (usuario: string, contrasena: string) =>
+  nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: usuario, pass: contrasena },
+  });
+
+type Transporte = ReturnType<typeof crearTransporte>;
+
+/** Cierra la conexión sin lanzar nunca (un fallo al cerrar no debe tapar el resultado del envío) */
+function cerrarTransporte(transporte: { close: () => void } | null | undefined) {
   try {
-    await cliente?.close();
+    transporte?.close();
   } catch {
     // ignorar
   }
@@ -387,7 +397,7 @@ async function enviarLote(
   o: {
     gmailUser: string;
     gmailPassword: string;
-    remitente: string;
+    remitente: { name: string; address: string };
     tipo: 'INICIAL' | 'RECTIFICACION';
     institucion: string;
     taller: string;
@@ -396,16 +406,8 @@ async function enviarLote(
   }
 ): Promise<{ enviados: number; errores: number; primerError?: string }> {
   const sinCuenta = !o.gmailUser || !o.gmailPassword;
-  let cliente: SMTPClient | null = null;
-  const nuevoCliente = () =>
-    new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: { username: o.gmailUser, password: o.gmailPassword },
-      },
-    });
+  // Una conexión para todo el lote; se recrea si un envío falla
+  let transporte: Transporte | null = null;
 
   let enviados = 0;
   let errores = 0;
@@ -430,12 +432,12 @@ async function enviarLote(
       // Un reintento con conexión nueva si el primero falla
       for (let intento = 1; intento <= 2; intento++) {
         try {
-          cliente ??= nuevoCliente();
-          await cliente.send({
+          transporte ??= crearTransporte(o.gmailUser, o.gmailPassword);
+          await transporte.sendMail({
             from: o.remitente,
             to: aviso.tutorEmail,
             subject: asunto,
-            content: `${texto}${TEXTO_NO_RESPONDER}`,
+            text: `${texto}${TEXTO_NO_RESPONDER}`,
             html,
             headers: ENCABEZADOS_NO_RESPONDER,
           });
@@ -443,8 +445,8 @@ async function enviarLote(
           break;
         } catch (err) {
           error = err instanceof Error ? err.message : 'No se pudo enviar el correo.';
-          await cerrarCliente(cliente);
-          cliente = null;
+          cerrarTransporte(transporte);
+          transporte = null;
         }
       }
     }
@@ -475,6 +477,6 @@ async function enviarLote(
     });
   }
 
-  await cerrarCliente(cliente);
+  cerrarTransporte(transporte);
   return { enviados, errores, primerError };
 }
