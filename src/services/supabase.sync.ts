@@ -30,7 +30,8 @@ export type StorageKey =
   | 'aa_movimientos_inscripcion'
   | 'aa_eventos'
   | 'aa_evento_talleres'
-  | 'aa_evento_participantes';
+  | 'aa_evento_participantes'
+  | 'aa_padron_alumnos';
 
 interface TableDef {
   table: string;
@@ -172,6 +173,12 @@ export const TABLES: Record<StorageKey, TableDef> = {
     columns: ['id', 'evento_id', 'grupo_id', 'estudiante_id', 'registrado_por', 'creado_en'],
     tags: ['eventos'],
     insertOnly: true,
+  },
+  aa_padron_alumnos: {
+    table: 'padron_alumnos',
+    columns: ['id', 'codigo', 'nombre', 'apellido', 'grado', 'seccion', 'ciclo', 'creado_en'],
+    tags: ['padron'],
+    defaults: { apellido: '' },
   },
 };
 

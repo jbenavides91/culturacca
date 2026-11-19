@@ -398,6 +398,50 @@ export interface Grado {
 }
 
 /**
+ * Alumno del padrón del colegio (Configuración → Padrón), cargado desde Excel.
+ * Solo sirve para autocompletar la matrícula: no es un alumno del sistema.
+ */
+export interface AlumnoPadron {
+  id: string;
+  /** Código escolar, si se conoce (el Excel inicial no lo trae) */
+  codigo?: string;
+  nombre: string;
+  apellido: string;
+  /** Nombre del grado del catálogo (o el texto original si no se pudo emparejar) */
+  grado?: string;
+  /** Sección del grado (A, B, …): se usa como "Aula regular" al matricular */
+  seccion?: string;
+  ciclo?: string;
+  creado_en: string;
+}
+
+/** Fila leída del Excel antes de importarla al padrón */
+export interface FilaImportPadron {
+  nombre: string;
+  apellido: string;
+  grado: string;
+  seccion: string;
+  codigo?: string;
+  /** El grado no coincide con ninguno del catálogo */
+  gradoDesconocido: boolean;
+  /** La separación nombres/apellidos es dudosa (revisar) */
+  separacionDudosa: boolean;
+}
+
+/** Coincidencia para autocompletar el asistente de matrícula */
+export interface SugerenciaAlumno {
+  origen: 'ESTUDIANTE' | 'PADRON';
+  id: string;
+  codigo?: string;
+  nombre: string;
+  apellido: string;
+  grado?: string;
+  aula_regular?: string;
+  edad?: number;
+  tutor_id?: string;
+}
+
+/**
  * Grados por defecto: solo se usan si el catálogo `grados` está vacío.
  * Para listar grados usar siempre `gradosDisponibles()` (src/utils/grados.ts).
  */

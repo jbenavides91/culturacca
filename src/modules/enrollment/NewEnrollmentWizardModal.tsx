@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   X,
   UserPlus,
@@ -19,8 +19,9 @@ import {
   Mail,
   Loader2,
   RotateCcw,
+  Search,
 } from 'lucide-react';
-import { Grupo, SolicitudMatricula } from '../../types/attendance';
+import { Estudiante, Grupo, SolicitudMatricula, SugerenciaAlumno } from '../../types/attendance';
 import { gradosDisponibles } from '../../utils/grados';
 import { storageService } from '../../services/storage.service';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
@@ -111,26 +112,118 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   // Available workshops
   const grupos = useMemo(() => storageService.getGrupos(), []);
 
-  // Pre-fill existing student data if student code matches existing student
+  // Autocompletado desde alumnos registrados y el padrón del colegio (Configuración → Padrón)
+  const [busquedaAlumno, setBusquedaAlumno] = useState('');
+  const [sugerenciasAbiertas, setSugerenciasAbiertas] = useState(false);
+  const [sugerenciaActiva, setSugerenciaActiva] = useState(0);
+  const [autocompletado, setAutocompletado] = useState<SugerenciaAlumno | null>(null);
+  const codigoInputRef = useRef<HTMLInputElement>(null);
+
+  const sugerencias = useMemo(
+    () => (busquedaAlumno.trim().length >= 2 ? storageService.buscarAlumnosParaMatricula(busquedaAlumno) : []),
+    [busquedaAlumno]
+  );
+
+  /** Rellena los datos de un alumno registrado (incluido su tutor) */
+  const rellenarDesdeEstudiante = (est: Estudiante) => {
+    setNombreAlumno(est.nombre);
+    setApellidoAlumno(est.apellido);
+    if (est.edad) setEdad(est.edad);
+    if (est.grado) setGrado(est.grado);
+    if (est.aula_regular) setAulaRegular(est.aula_regular);
+
+    const tutor = storageService.getTutorById(est.tutor_id);
+    if (tutor) {
+      setTutorNombre(tutor.nombre);
+      setTutorEmail(tutor.email);
+      setTutorTelefono(tutor.telefono);
+      if (tutor.parentesco) setTutorParentesco(tutor.parentesco);
+    }
+  };
+
+  /** Rellena nombre, apellidos, grado y sección del padrón (el padrón no trae edad ni tutor) */
+  const rellenarDesdePadron = (s: SugerenciaAlumno) => {
+    // Si antes se cargó un alumno registrado, sus datos de tutor no corresponden a esta persona
+    if (autocompletado?.origen === 'ESTUDIANTE') {
+      setTutorNombre('');
+      setTutorEmail('');
+      setTutorTelefono('');
+      setTutorCedula('');
+    }
+    setNombreAlumno(s.nombre);
+    setApellidoAlumno(s.apellido);
+    if (s.grado) setGrado(s.grado);
+    if (s.aula_regular) setAulaRegular(s.aula_regular);
+    setAutocompletado(s);
+  };
+
+  // Pre-fill existing student data if student code matches existing student (or someone in the padrón)
   const handleCodigoChange = (code: string) => {
     setCodigoAlumno(code);
-    const existing = storageService.getEstudiantes().find(
-      (e) => e.matricula.trim().toUpperCase() === code.trim().toUpperCase()
-    );
+    const clave = code.trim().toUpperCase();
+    if (!clave) return;
+    const existing = storageService.getEstudiantes().find((e) => e.matricula.trim().toUpperCase() === clave);
     if (existing) {
-      setNombreAlumno(existing.nombre);
-      setApellidoAlumno(existing.apellido);
-      if (existing.edad) setEdad(existing.edad);
-      if (existing.grado) setGrado(existing.grado);
-      if (existing.aula_regular) setAulaRegular(existing.aula_regular);
+      rellenarDesdeEstudiante(existing);
+      setAutocompletado({
+        origen: 'ESTUDIANTE',
+        id: existing.id,
+        codigo: existing.matricula,
+        nombre: existing.nombre,
+        apellido: existing.apellido,
+      });
+      return;
+    }
+    const enPadron = storageService.getPadron().find((p) => p.codigo?.trim().toUpperCase() === clave);
+    if (enPadron) {
+      rellenarDesdePadron({
+        origen: 'PADRON',
+        id: enPadron.id,
+        codigo: enPadron.codigo,
+        nombre: enPadron.nombre,
+        apellido: enPadron.apellido,
+        grado: enPadron.grado,
+        aula_regular: enPadron.seccion,
+      });
+    }
+  };
 
-      const tutor = storageService.getTutorById(existing.tutor_id);
-      if (tutor) {
-        setTutorNombre(tutor.nombre);
-        setTutorEmail(tutor.email);
-        setTutorTelefono(tutor.telefono);
-        if (tutor.parentesco) setTutorParentesco(tutor.parentesco);
-      }
+  const elegirSugerencia = (s: SugerenciaAlumno) => {
+    setBusquedaAlumno('');
+    setSugerenciasAbiertas(false);
+    setErrorMessage(null);
+    if (s.origen === 'ESTUDIANTE') {
+      handleCodigoChange(s.codigo || '');
+      return;
+    }
+    rellenarDesdePadron(s);
+    if (s.codigo) {
+      setCodigoAlumno(s.codigo);
+    } else {
+      // Un código de otro alumno registrado no debe quedar asociado a esta persona
+      const codigoActual = codigoAlumno.trim().toUpperCase();
+      const deOtro =
+        codigoActual &&
+        storageService.getEstudiantes().some((e) => e.matricula.trim().toUpperCase() === codigoActual);
+      if (deOtro) setCodigoAlumno('');
+      setTimeout(() => codigoInputRef.current?.focus(), 0);
+    }
+  };
+
+  const teclaBusqueda = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!sugerenciasAbiertas || sugerencias.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSugerenciaActiva((i) => (i + 1) % sugerencias.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSugerenciaActiva((i) => (i - 1 + sugerencias.length) % sugerencias.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      elegirSugerencia(sugerencias[Math.min(sugerenciaActiva, sugerencias.length - 1)]);
+    } else if (e.key === 'Escape') {
+      e.stopPropagation();
+      setSugerenciasAbiertas(false);
     }
   };
 
@@ -443,12 +536,107 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   Ingrese el código escolar y los datos académicos del estudiante en su horario regular.
                 </p>
 
+                {/* Buscador: alumnos registrados y padrón del colegio */}
+                <div className="relative mb-3.5">
+                  <label
+                    htmlFor="buscar-alumno-matricula"
+                    className="block text-xs font-semibold mb-1 text-[#172033] dark:text-[#F1F5F9]"
+                  >
+                    Buscar alumno por nombre o código
+                  </label>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="buscar-alumno-matricula"
+                      type="search"
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={sugerenciasAbiertas && sugerencias.length > 0}
+                      aria-controls="sugerencias-alumno-matricula"
+                      aria-autocomplete="list"
+                      placeholder="Ej: Ana Sofía Ortega o CCA-2026-105"
+                      value={busquedaAlumno}
+                      onChange={(e) => {
+                        setBusquedaAlumno(e.target.value);
+                        setSugerenciasAbiertas(true);
+                        setSugerenciaActiva(0);
+                      }}
+                      onFocus={() => setSugerenciasAbiertas(true)}
+                      onBlur={() => setTimeout(() => setSugerenciasAbiertas(false), 150)}
+                      onKeyDown={teclaBusqueda}
+                      className="w-full pl-8 pr-3 py-2 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs focus:ring-2 focus:ring-[#4F46E5] outline-none"
+                    />
+                  </div>
+                  {sugerenciasAbiertas && busquedaAlumno.trim().length >= 2 && (
+                    <ul
+                      id="sugerencias-alumno-matricula"
+                      role="listbox"
+                      className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D] shadow-lg"
+                    >
+                      {sugerencias.length === 0 ? (
+                        <li className="px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400">
+                          Sin coincidencias. Complete los datos manualmente.
+                        </li>
+                      ) : (
+                        sugerencias.map((s, i) => (
+                          <li
+                            key={`${s.origen}-${s.id}`}
+                            role="option"
+                            aria-selected={i === sugerenciaActiva}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              elegirSugerencia(s);
+                            }}
+                            onMouseEnter={() => setSugerenciaActiva(i)}
+                            className={`px-3 py-2 cursor-pointer flex items-center gap-2 text-xs ${
+                              i === sugerenciaActiva ? 'bg-indigo-50 dark:bg-indigo-950/40' : ''
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-[#172033] dark:text-[#F1F5F9] truncate">
+                                {s.nombre} {s.apellido}
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                {s.grado || 'Sin grado'}
+                                {s.aula_regular && ` · ${s.origen === 'PADRON' ? 'Sección ' : ''}${s.aula_regular}`}
+                                {s.codigo && <span className="font-mono"> · {s.codigo}</span>}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                s.origen === 'ESTUDIANTE'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              {s.origen === 'ESTUDIANTE' ? 'Registrado' : 'Padrón'}
+                            </span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                  {autocompletado && (
+                    <p className="mt-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 flex items-start gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-px" />
+                      <span>
+                        {autocompletado.origen === 'ESTUDIANTE'
+                          ? `Datos de ${autocompletado.nombre} ${autocompletado.apellido} (alumno registrado) y de su tutor cargados.`
+                          : `Nombre, grado y sección de ${autocompletado.nombre} ${autocompletado.apellido} tomados del padrón. Complete ${
+                              codigoAlumno.trim() ? '' : 'el código de alumno, '
+                            }la edad y los datos del tutor.`}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="block text-xs font-semibold mb-1 text-[#172033] dark:text-[#F1F5F9]">
                       Código de Alumno / Carnet *
                     </label>
                     <input
+                      ref={codigoInputRef}
                       type="text"
                       required
                       placeholder="Ej: CCA-2026-105 o ART-2026-041"

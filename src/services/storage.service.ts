@@ -1,4 +1,7 @@
 import {
+  AlumnoPadron,
+  FilaImportPadron,
+  SugerenciaAlumno,
   Evento,
   EventoParticipante,
   EventoTaller,
@@ -43,6 +46,7 @@ import { supabase } from './supabase.client';
 import { StorageKey, syncStore, TABLES } from './supabase.sync';
 import { fechaLocalISO, fechaPagoLocal } from '../utils/fechas';
 import { compararTexto } from '../utils/orden';
+import { claveNombre, normalizarTexto } from '../utils/padron';
 
 const STORAGE_KEYS = {
   PERFILES: 'aa_perfiles',
@@ -64,6 +68,7 @@ const STORAGE_KEYS = {
   EVENTOS: 'aa_eventos',
   EVENTO_TALLERES: 'aa_evento_talleres',
   EVENTO_PARTICIPANTES: 'aa_evento_participantes',
+  PADRON: 'aa_padron_alumnos',
 } as const satisfies Record<string, StorageKey>;
 
 // Listeners for data updates
@@ -2018,8 +2023,13 @@ class StorageService {
         .filter((m) => igual(m.grado))
         .map((m) => ({ ...m, grado: nombre }));
       if (solicitudes.length > 0) this.write(STORAGE_KEYS.MATRICULAS, solicitudes);
+      const padron = this.read<AlumnoPadron[]>(STORAGE_KEYS.PADRON, [])
+        .filter((p) => igual(p.grado))
+        .map((p) => ({ ...p, grado: nombre }));
+      if (padron.length > 0) this.write(STORAGE_KEYS.PADRON, padron);
       cacheService.invalidateByTag('estudiantes');
       cacheService.invalidateByTag('matriculas');
+      cacheService.invalidateByTag('padron');
     }
 
     cacheService.invalidateByTag('grados');
@@ -2058,6 +2068,204 @@ class StorageService {
     this.remove(STORAGE_KEYS.GRADOS, [id]);
     cacheService.invalidateByTag('grados');
     notifyDataChange();
+  }
+
+  // --- PADRÓN DE ALUMNOS (listado del colegio; solo para autocompletar la matrícula) ---
+
+  getPadron(): AlumnoPadron[] {
+    const cached = cacheService.get<AlumnoPadron[]>('padron_all');
+    if (cached) return cached;
+    const data = this.read<AlumnoPadron[]>(STORAGE_KEYS.PADRON, []);
+    cacheService.set('padron_all', data, 60000, ['padron']);
+    return data;
+  }
+
+  /**
+   * Importa filas al padrón (ADMIN). La misma persona (nombre completo sin tildes ni
+   * mayúsculas) se actualiza en lugar de duplicarse. Con `reemplazar`, se quitan del
+   * padrón quienes no vienen en el archivo.
+   */
+  importarPadron(
+    filas: FilaImportPadron[],
+    opciones: { reemplazar?: boolean } = {}
+  ): { agregados: number; actualizados: number; sinCambios: number; quitados: number; omitidos: number } {
+    if (this.perfilActual?.rol !== 'ADMIN') throw new Error('Solo un administrador puede importar el padrón.');
+
+    const existentes = this.getPadron();
+    const porClave = new Map(existentes.map((p) => [claveNombre(p.nombre, p.apellido), p]));
+    const porCodigo = new Map(
+      existentes.filter((p) => p.codigo?.trim()).map((p) => [p.codigo!.trim().toUpperCase(), p])
+    );
+    const ciclo = String(this.getConfiguracion().ciclo_academico_actual || new Date().getFullYear());
+    const ahora = new Date().toISOString();
+
+    const cambios: AlumnoPadron[] = [];
+    const vistos = new Set<string>();
+    let agregados = 0;
+    let actualizados = 0;
+    let sinCambios = 0;
+    let omitidos = 0;
+
+    for (const f of filas) {
+      const nombre = f.nombre.replace(/\s+/g, ' ').trim();
+      const apellido = f.apellido.replace(/\s+/g, ' ').trim();
+      const clave = claveNombre(nombre, apellido);
+      const codigo = f.codigo?.trim().toUpperCase() || undefined;
+      if (!nombre || vistos.has(clave)) {
+        omitidos++;
+        continue;
+      }
+      vistos.add(clave);
+
+      const previo = (codigo && porCodigo.get(codigo)) || porClave.get(clave);
+      const datos = {
+        nombre,
+        apellido,
+        grado: f.grado.trim() || undefined,
+        seccion: f.seccion.trim().toUpperCase() || undefined,
+        codigo: codigo ?? previo?.codigo,
+      };
+      if (!previo) {
+        cambios.push({ id: `pad-${nuevoId()}`, ...datos, ciclo, creado_en: ahora });
+        agregados++;
+        continue;
+      }
+      vistos.add(claveNombre(previo.nombre, previo.apellido));
+      const igual =
+        previo.nombre === datos.nombre &&
+        previo.apellido === datos.apellido &&
+        (previo.grado ?? '') === (datos.grado ?? '') &&
+        (previo.seccion ?? '') === (datos.seccion ?? '') &&
+        (previo.codigo ?? '') === (datos.codigo ?? '');
+      if (igual) {
+        sinCambios++;
+      } else {
+        cambios.push({ ...previo, ...datos, ciclo });
+        actualizados++;
+      }
+    }
+
+    // Un código no puede quedar en dos personas (índice único en la base de datos)
+    const codigosNuevos = new Map<string, string>();
+    for (const c of cambios) {
+      if (!c.codigo) continue;
+      const otro = existentes.find(
+        (p) => p.id !== c.id && p.codigo?.trim().toUpperCase() === c.codigo && !cambios.some((x) => x.id === p.id)
+      );
+      if (otro || codigosNuevos.has(c.codigo)) {
+        throw new Error(
+          `El código ${c.codigo} está repetido (${c.nombre} ${c.apellido}${otro ? ` y ${otro.nombre} ${otro.apellido}` : ''}).`
+        );
+      }
+      codigosNuevos.set(c.codigo, c.id);
+    }
+
+    const quitar = opciones.reemplazar
+      ? existentes.filter((p) => !vistos.has(claveNombre(p.nombre, p.apellido))).map((p) => p.id)
+      : [];
+
+    if (quitar.length > 0) this.remove(STORAGE_KEYS.PADRON, quitar);
+    if (cambios.length > 0) this.write(STORAGE_KEYS.PADRON, cambios);
+    cacheService.invalidateByTag('padron');
+    notifyDataChange();
+    return { agregados, actualizados, sinCambios, quitados: quitar.length, omitidos };
+  }
+
+  /** Corrige una persona del padrón (ADMIN) */
+  actualizarAlumnoPadron(id: string, datos: Partial<Pick<AlumnoPadron, 'nombre' | 'apellido' | 'grado' | 'seccion' | 'codigo'>>): AlumnoPadron {
+    if (this.perfilActual?.rol !== 'ADMIN') throw new Error('Solo un administrador puede editar el padrón.');
+    const actual = this.getPadron().find((p) => p.id === id);
+    if (!actual) throw new Error('Alumno no encontrado en el padrón.');
+    const actualizado: AlumnoPadron = {
+      ...actual,
+      ...datos,
+      nombre: (datos.nombre ?? actual.nombre).replace(/\s+/g, ' ').trim(),
+      apellido: (datos.apellido ?? actual.apellido).replace(/\s+/g, ' ').trim(),
+      codigo: (datos.codigo ?? actual.codigo)?.trim().toUpperCase() || undefined,
+      seccion: (datos.seccion ?? actual.seccion)?.trim().toUpperCase() || undefined,
+    };
+    if (!actualizado.nombre) throw new Error('El nombre es obligatorio.');
+    if (
+      actualizado.codigo &&
+      this.getPadron().some((p) => p.id !== id && p.codigo?.trim().toUpperCase() === actualizado.codigo)
+    ) {
+      throw new Error(`El código ${actualizado.codigo} ya pertenece a otra persona del padrón.`);
+    }
+    this.write(STORAGE_KEYS.PADRON, [actualizado]);
+    cacheService.invalidateByTag('padron');
+    notifyDataChange();
+    return actualizado;
+  }
+
+  /** Quita personas del padrón (ADMIN). No afecta a alumnos ya matriculados. */
+  eliminarDelPadron(ids: string[]): void {
+    if (this.perfilActual?.rol !== 'ADMIN') throw new Error('Solo un administrador puede modificar el padrón.');
+    if (ids.length === 0) return;
+    this.remove(STORAGE_KEYS.PADRON, ids);
+    cacheService.invalidateByTag('padron');
+    notifyDataChange();
+  }
+
+  /**
+   * Busca por código o por nombre (todas las palabras, sin tildes) entre los alumnos
+   * registrados y el padrón, para autocompletar la matrícula. Si una persona del padrón
+   * ya es alumno registrado (mismo código o mismo nombre completo), se muestra solo el alumno.
+   */
+  buscarAlumnosParaMatricula(texto: string, limite = 8): SugerenciaAlumno[] {
+    const q = normalizarTexto(texto);
+    if (q.length < 2) return [];
+    const palabras = q.replace(/\s*-\s*/g, ' ').split(' ').filter(Boolean);
+    const qCodigo = texto.trim().toUpperCase();
+
+    const puntuar = (s: SugerenciaAlumno): number | null => {
+      const codigo = (s.codigo || '').trim().toUpperCase();
+      if (codigo && codigo === qCodigo) return 0;
+      if (codigo && qCodigo.length >= 2 && codigo.startsWith(qCodigo)) return 1;
+      const completo = claveNombre(s.nombre, s.apellido);
+      if (!palabras.every((p) => completo.includes(p))) return null;
+      return completo.startsWith(palabras[0]) ? 2 : 3;
+    };
+
+    const estudiantes: SugerenciaAlumno[] = this.getEstudiantes().map((e) => ({
+      origen: 'ESTUDIANTE',
+      id: e.id,
+      codigo: e.matricula,
+      nombre: e.nombre,
+      apellido: e.apellido,
+      grado: e.grado,
+      aula_regular: e.aula_regular,
+      edad: e.edad,
+      tutor_id: e.tutor_id,
+    }));
+    const codigosRegistrados = new Set(estudiantes.map((e) => (e.codigo || '').trim().toUpperCase()).filter(Boolean));
+    const nombresRegistrados = new Set(estudiantes.map((e) => claveNombre(e.nombre, e.apellido)));
+    const padron: SugerenciaAlumno[] = this.getPadron()
+      .filter(
+        (p) =>
+          !(p.codigo && codigosRegistrados.has(p.codigo.trim().toUpperCase())) &&
+          !nombresRegistrados.has(claveNombre(p.nombre, p.apellido))
+      )
+      .map((p) => ({
+        origen: 'PADRON',
+        id: p.id,
+        codigo: p.codigo,
+        nombre: p.nombre,
+        apellido: p.apellido,
+        grado: p.grado,
+        aula_regular: p.seccion,
+      }));
+
+    return [...estudiantes, ...padron]
+      .map((s) => ({ s, p: puntuar(s) }))
+      .filter((x): x is { s: SugerenciaAlumno; p: number } => x.p !== null)
+      .sort(
+        (a, b) =>
+          a.p - b.p ||
+          compararTexto(a.s.apellido, b.s.apellido) ||
+          compararTexto(a.s.nombre, b.s.nombre)
+      )
+      .slice(0, limite)
+      .map((x) => x.s);
   }
 
   // --- DÍAS NO LECTIVOS (feriados, vacaciones; no generan sesiones) ---

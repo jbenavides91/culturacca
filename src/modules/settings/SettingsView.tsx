@@ -26,6 +26,7 @@ import {
   DoorOpen,
   Banknote,
   Gauge,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { ConfiguracionSistema, PeriodoArancel, Perfil, UserRole } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -38,13 +39,14 @@ import {
 import { ContractTemplateTab } from './ContractTemplateTab';
 import { SalonesTab } from './SalonesTab';
 import { GradosTab } from './GradosTab';
+import { PadronTab } from './PadronTab';
 import { DiasNoLectivosTab } from './DiasNoLectivosTab';
 import { CortesBimestralesTab } from './CortesBimestralesTab';
 import { CuposTab } from './CuposTab';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
-type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'dias' | 'cortes' | 'cupos' | 'contrato';
+type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'padron' | 'dias' | 'cortes' | 'cupos' | 'contrato';
 
 interface SettingsViewProps {
   /** Abre directamente el formulario de nuevo usuario con este rol (p. ej. desde Docentes) */
@@ -375,6 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
               { id: 'reglas', label: 'Reglas y Parámetros', icono: Sliders },
               { id: 'salones', label: 'Salones', icono: DoorOpen },
               { id: 'grados', label: 'Grados', icono: GraduationCap },
+              { id: 'padron', label: 'Padrón', icono: FileSpreadsheet },
               { id: 'dias', label: 'Días no lectivos', icono: CalendarOff },
               { id: 'cortes', label: 'Cortes', icono: CalendarRange },
               { id: 'cupos', label: 'Cupos', icono: Gauge },
@@ -806,6 +809,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* TAB: GRADOS ESCOLARES */}
       {activeTab === 'grados' && <GradosTab />}
+      {activeTab === 'padron' && <PadronTab />}
 
       {/* TAB: DÍAS NO LECTIVOS (feriados y vacaciones) */}
       {activeTab === 'dias' && <DiasNoLectivosTab />}
