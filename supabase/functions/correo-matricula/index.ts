@@ -67,6 +67,18 @@ const remitenteNoResponder = (nombre: string, cuenta: string) => {
   return `${/responder/i.test(limpio) ? limpio : `${limpio} - No responder`} <${cuenta}>`;
 };
 
+/**
+ * Cierra la conexión SMTP sin lanzar nunca: en denomailer, close() devuelve `void | Promise<void>`
+ * (el cliente básico devuelve void), así que `close().catch()` fallaba y tapaba el resultado del envío.
+ */
+async function cerrarCliente(cliente: SMTPClient | null | undefined) {
+  try {
+    await cliente?.close();
+  } catch {
+    // ignorar
+  }
+}
+
 // ---------- Utilidades de texto ----------
 
 const escaparHtml = (v: unknown) =>
@@ -453,7 +465,7 @@ async function manejar(req: Request): Promise<Response> {
         ],
       });
     } finally {
-      await cliente.close().catch(() => undefined);
+      await cerrarCliente(cliente);
     }
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : 'No se pudo enviar el correo.';
