@@ -179,8 +179,13 @@ export const EventoFormModal: React.FC<Props> = ({ evento, grupos, perfiles, onC
                 aria-label="Buscar taller"
               />
             </div>
-            <ul className="rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] divide-y divide-[#E7EAF0] dark:divide-[#2B3442] max-h-60 overflow-y-auto">
-              {talleres.length === 0 && <li className="p-3 text-[#667085] dark:text-[#94A3B8]">No hay talleres.</li>}
+            {/* Alto fijo: la ventana no cambia de tamaño mientras se busca */}
+            <ul className="rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] divide-y divide-[#E7EAF0] dark:divide-[#2B3442] h-60 overflow-y-auto">
+              {talleres.length === 0 && (
+                <li className="h-full flex items-center justify-center p-3 text-center text-[#667085] dark:text-[#94A3B8]">
+                  {busqueda.trim() ? `Ningún taller coincide con «${busqueda.trim()}».` : 'No hay talleres.'}
+                </li>
+              )}
               {talleres.map((g) => (
                 <li key={g.id}>
                   <label className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-[#151A22]">
