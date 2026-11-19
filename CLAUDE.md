@@ -48,6 +48,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - PROFESOR: `asistencias`, `sesiones`, `log_notificaciones`, and inserting its own `anecdotario` notes.
 - CAJERO and MATRICULA: `matriculas`, `estudiantes`, `tutores`, `inscripciones`.
 
+Some rules are stricter than RLS and are enforced only in the UI and the service. The database would allow these writes, so they must be kept in both places:
+- **Cambiar de taller:** ADMIN only (`cambiarDeTaller` checks `perfilActual`).
+- **"Estado Pago Anual" in Estudiantes → Editar:** ADMIN and CAJERO only.
+- **Solvency gate:** a student enters a workshop only once Caja has confirmed the payment.
+- **Workshop capacity:** a full workshop takes no more requests or enrollments.
+- **Schedule clash:** a student cannot hold two workshops that overlap.
+
 **Policy shape** (since `0007`): every table has one `lectura_personal_activo` SELECT policy plus separate `escritura_insert` / `escritura_update` / `escritura_delete` policies. `0001` and `0004` still create the old `escritura_por_rol FOR ALL` shape, and `0007` replaces it. When adding a table, reuse the `pg_temp.reescribir_politicas(tabla, roles)` helper from `0007` instead of copying the old pattern. Never use `FOR ALL`, which overlaps the SELECT policy and triggers the "multiple permissive policies" advisor. Always wrap functions as `(select public.current_rol())` and `(select auth.uid())` so they are evaluated once per query, not per row. A rolled-back 20-case test covering ADMIN, PROFESOR, CAJERO, a user without a profile, and the anecdotario rules passed after this change. If a role gets a new write action, update the policy too, or the write is rejected and rolled back.
 
 **Data layer** (`src/services/storage.service.ts`, singleton `storageService`) keeps a **synchronous API on top of an in-memory store hydrated from Supabase** (`src/services/supabase.sync.ts`, `syncStore`):
@@ -222,7 +229,7 @@ Callers:
     - The periods are Semana / Mes / **Bimestre** (the default: the current cut, or the whole cycle if none has started) / Ciclo (`{}`) / Rango. A saved `'ciclo'` from before the per-cut reset is read as `'bimestre'`.
     - It calls `calcularAlertasEstudiantes(grupoId | undefined, rango)`. Only closed sessions in those dates count, and the Configuración thresholds apply to that period.
   - Shared pieces live in `attendanceStatus.shared.tsx`. Those are `ESTADOS`, `FilaEstatus`, `FilaSesion`, `BadgeExtra`, and the UTC date helpers on `YYYY-MM-DD` strings (`sumarDias`, `lunesDe`, `inicioDeMes`, `finDeMes`, `sumarMeses`). Use them instead of `new Date('YYYY-MM-DD')`.
-- **Talleres** (`WorkshopsView`) toggles between **Tarjetas** (the default grid) and **Lista** (a table from `md` up, compact rows on phones). The choice is remembered in `localStorage` under `cca_talleres_vista`. Both views share `datosTaller()`, `renderAcciones(grupo, compacto)` (Editar / Eliminar / Alumnos for ADMIN, plus Asistencia; icon-only in the list) and `BarraAvance`, so a new action or field goes in one place. A search bar (not persisted) filters both views after the role filter, case- and accent-insensitive, requiring every typed word to match the workshop name, teacher, room, hours or weekdays (short "Mié" or full "miércoles"); it shows "N de M talleres" and its own empty state with "Limpiar búsqueda".
+- **Talleres** (`WorkshopsView`) toggles between **Tarjetas** (the default grid) and **Lista** (a table from `md` up, compact rows on phones). The choice is remembered in `localStorage` under `cca_talleres_vista`. Both views share `datosTaller()` (including `ocupacion` for the `CupoBadge`), `renderAcciones(grupo, compacto)` (Editar / Eliminar / Alumnos / Sesión extra for ADMIN, plus Asistencia; icon-only in the list) and `BarraAvance`, so a new action or field goes in one place. The create and edit forms have no date fields (the cuts define the calendar). They require "Cupo máximo (alumnos)", which is pre-filled from the room's `capacidad`. A search bar (not persisted) filters both views after the role filter, case- and accent-insensitive, requiring every typed word to match the workshop name, teacher, room, hours or weekdays (short "Mié" or full "miércoles"); it shows "N de M talleres" and its own empty state with "Limpiar búsqueda".
 - **Reportes** has four tabs (Corte bimestral is described under Cortes bimestrales):
   - **Matriz de Asistencia** (`MatrizAsistenciaTab.tsx`; `ReportsView` only holds the header and tabs): ADMIN and PROFESOR, organized **by two-month cut** (see "Per-cut counters").
     - Filters:
@@ -255,7 +262,23 @@ Callers:
   - A date filter offers any date, a single day, or a range, with Hoy / Esta semana / Este mes shortcuts.
   - Pending requests are filtered by `fecha_solicitud`; collected or formalized ones by `fecha_pago` (falling back to `fecha_aceptacion`). The comparison uses local dates via `fechaLocalISO(new Date(iso))`.
   - Status-button counts come from `solicitudesBase` (search + date), so they match the list. The top metric cards stay global.
-- **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the latest past session that is not closed, else the next one, else the last. When the workshop has no class today, an info banner says so (naming the non-teaching day, if any). Past sessions are never locked; only future ones are. Each student row has an Anecdotario column. Below `sm`/`md` the view has its own mobile layout:
+  - Pending requests show their workshop's `CupoBadge`, for information only. Their reservation is already counted, so "Procesar Pago y Formalizar" always fits.
+  - Formalizing (`procesarPagoYFormalizarMatricula`) is the only way a new student enters a workshop. It marks the student ACTIVO, AL_DIA and solvent, then enrolls them.
+- **Matrículas** (`MatriculasView`): the list of requests plus `NewEnrollmentWizardModal`.
+  - Step 2 of the wizard lists the workshops with their `CupoBadge`. It disables those that are full, that clash with the code's enrollments or pending requests, or where the student is already enrolled or pending.
+  - Step 3 shows the chosen workshop's `BarraCupo`.
+  - Step 4 emails the tutor (`enviarCorreoMatricula`).
+  - Each row has an envelope button to send or resend that email.
+- **Estudiantes** (`StudentsView`): row actions are Anecdotario (ADMIN), **Cambiar de taller** (ADMIN, `CambiarTallerModal`), Editar, Renovar, and Baja/Reactivar.
+  - In Editar, "Estado Pago Anual" is editable only by ADMIN and CAJERO. Other roles keep the current payment values and any pending renewal.
+  - The "Con Alertas" filter counts the current cut.
+  - A renewal sends the email only when a tutor address was typed. The form fills in a placeholder address when it is left empty, and that placeholder never receives mail.
+- **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the latest past session that is not closed, else the next one, else the last. When the workshop has no class today, an info banner says so (naming the non-teaching day, if any). Past sessions are never locked; only future ones are. Each student row has an Anecdotario column.
+  - The alert badges and the "En Riesgo" filter count the **current cut**.
+  - An amber **"Pago pendiente"** badge marks enrolled students who are not solvent (`estadoSolvencia`), such as a pending renewal. Their attendance can still be taken.
+  - ADMIN and the group's PROFESOR can add an extraordinary session.
+
+  Below `sm`/`md` the view has its own mobile layout:
   - The header puts the workshop select (truncated) and an icon-only Excel button on one row.
   - The session stepper is full width, with 40 px or larger arrows.
   - The rail with every session node is replaced by the full date plus a thin cycle-progress bar.
@@ -331,6 +354,14 @@ Check the server side first with the MCP. `query_logs` on `auth_logs` / `edge_lo
 - **Sessions shifted by one day**: a timezone bug from parsing `YYYY-MM-DD` with `new Date()` and then calling `getDay()`. See the dates rule in the data layer section.
 - **A teacher no longer appears in the Talleres teacher selector but still owns a workshop**: their role was changed away from PROFESOR in Configuración. The selector lists only `PROFESOR`, while `grupos.profesor_id` keeps pointing to them. Restore the role or reassign the workshop.
 - **MCP `execute_sql` confirmation expires**: see the Supabase MCP notes above (read-only queries and the rolled-back RLS test technique).
+- **Every save of a table fails right after a code change** ("column … does not exist" toast, then a re-hydrate): the frontend already sends a new column, for example one added to `TABLES[...].columns`, but its migration is not applied yet. Apply the migration before running the new code locally or deploying it.
+- **A student cannot be added to a workshop** (Talleres → Alumnos, Caja, or a move). Read the reason shown:
+  - "Pendiente de pago en Caja" / "Renovación pendiente": the solvency gate.
+  - "Taller lleno": occupancy counts the requests in Caja too. Check Configuración → Cupos.
+  - A schedule clash, possibly with a **pending request** rather than an enrolled workshop.
+  - All of these are intended rules.
+- **The "Aplicar cortes" recalculation never ran** (old sessions are still there): the edge logs show no `DELETE` on `sesiones`. The cuts were created with an older bundle. Hard-reload, then press Configuración → Cortes → "Aplicar cortes a los talleres".
+- **The enrollment email shows "Falta configurar la cuenta de envío"**: the `GMAIL_USER` / `GMAIL_APP_PASSWORD` secrets of `correo-matricula` are not set. For other failures, read `matriculas.correo_error` and the edge-function logs.
 
 ## Specification docs
 
