@@ -21,6 +21,7 @@ import { storageService, subscribeToData } from '../../services/storage.service'
 import { EnrollStudentsModal } from './EnrollStudentsModal';
 import { SesionExtraordinariaModal, fechaLargaSesion } from '../attendance/SesionExtraordinariaModal';
 import { SalonSelect } from './SalonSelect';
+import { CupoBadge } from '../../components/CupoIndicador';
 import { VistaPreviaSesiones, contarSesionesPrevistas } from './VistaPreviaSesiones';
 import { arancelDeGrupo, arancelGeneral, etiquetaPeriodo, formatearMonto } from '../../utils/arancel';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
@@ -99,6 +100,9 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
   const [editAula, setEditAula] = useState('');
   const [editCosto, setEditCosto] = useState('');
   const [costo, setCosto] = useState('');
+  // Cupo máximo de alumnos (obligatorio); se propone la capacidad del salón elegido
+  const [cupo, setCupo] = useState('');
+  const [editCupo, setEditCupo] = useState('');
 
   // Delete Workshop state
   const [grupoAEliminar, setGrupoAEliminar] = useState<Grupo | null>(null);
@@ -132,6 +136,19 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
     setEditHoraFin(g.hora_fin);
     setEditAula(g.aula || '');
     setEditCosto(g.costo ? String(g.costo) : '');
+    setEditCupo(g.cupo_maximo ? String(g.cupo_maximo) : '');
+  };
+
+  /** Cupo escrito en el formulario: entero > 0, o null si no es válido */
+  const leerCupo = (texto: string) => {
+    const n = Number(texto);
+    return texto.trim() && Number.isInteger(n) && n > 0 ? n : null;
+  };
+
+  /** Al elegir un salón del catálogo con capacidad, la propone como cupo si aún está vacío */
+  const elegirSalon = (valor: string, cupoActual: string, fijarCupo: (v: string) => void) => {
+    const capacidad = salones.find((x) => x.nombre === valor)?.capacidad;
+    if (!cupoActual.trim() && capacidad) fijarCupo(String(capacidad));
   };
 
   const handleUpdateWorkshop = (e: React.FormEvent) => {
@@ -140,6 +157,11 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
 
     if (contarSesionesPrevistas(editDiasSemana, editingGrupo.creado_en) === 0) {
       alert('Con esos días el taller no tendría ninguna clase en los cortes registrados (Configuración → Cortes).');
+      return;
+    }
+    const cupoEdit = leerCupo(editCupo);
+    if (cupoEdit === null) {
+      alert('Indica el cupo máximo del taller: un número entero de alumnos mayor que 0.');
       return;
     }
     const costoEdit = editCosto.trim() ? Number(editCosto) : undefined;
@@ -157,6 +179,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
         hora_fin: editHoraFin,
         aula: editAula.trim() || 'Taller Principal',
         costo: costoEdit,
+        cupo_maximo: cupoEdit,
       });
 
       const partes: string[] = [];
@@ -233,6 +256,11 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       );
       return;
     }
+    const cupoNuevo = leerCupo(cupo);
+    if (cupoNuevo === null) {
+      alert('Indica el cupo máximo del taller: un número entero de alumnos mayor que 0.');
+      return;
+    }
     const costoNuevo = costo.trim() ? Number(costo) : undefined;
     if (costoNuevo !== undefined && (!Number.isFinite(costoNuevo) || costoNuevo <= 0)) {
       alert('El costo del taller debe ser un número mayor que 0, o déjalo vacío para usar el arancel general.');
@@ -242,6 +270,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
     try {
       const nuevo = storageService.crearGrupoConSesiones({
         costo: costoNuevo,
+        cupo_maximo: cupoNuevo,
         nombre: nombre.trim(),
         profesor_id: profesorId,
         dias_semana: diasSemana,
@@ -255,6 +284,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       setNombre('');
       setAula('');
       setCosto('');
+      setCupo('');
 
       // Open enrollment modal
       setEnrollModalGrupo(nuevo.grupo);
@@ -321,6 +351,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
       prof: perfiles.find((p) => p.id === g.profesor_id),
       sesiones,
       estudiantes: storageService.getEstudiantesByGrupo(g.id),
+      ocupacion: storageService.ocupacionTaller(g.id),
       closedCount,
       pct: sesiones.length > 0 ? (closedCount / sesiones.length) * 100 : 0,
     };
@@ -546,7 +577,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {visibleGrupos.map((grupo) => {
-                      const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
+                      const { prof, sesiones, estudiantes, ocupacion, closedCount, pct } = datosTaller(grupo);
                       return (
                         <tr key={grupo.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="px-4 py-3">
@@ -571,7 +602,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                             {!(Number(grupo.costo) > 0) && <span className="text-slate-400"> (general)</span>}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
-                            <strong className="font-medium text-slate-900 dark:text-white">{estudiantes.length}</strong>
+                            <CupoBadge ocupacion={ocupacion} compacto className="mr-1" />
                             {currentProfile.rol === 'ADMIN' && (
                               <button
                                 type="button"
@@ -601,7 +632,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
               {/* Filas compactas (móvil) */}
               <ul className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/80">
                 {visibleGrupos.map((grupo) => {
-                  const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
+                  const { prof, sesiones, estudiantes, ocupacion, closedCount, pct } = datosTaller(grupo);
                   return (
                     <li key={grupo.id} className="p-3 space-y-2">
                       <div className="min-w-0">
@@ -618,8 +649,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                         <span aria-hidden="true">·</span>
                         <span className="truncate">{diasTexto(grupo)}</span>
                         <span aria-hidden="true">·</span>
-                        <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{estudiantes.length}</span>
+                        <CupoBadge ocupacion={ocupacion} compacto className="shrink-0" />
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
@@ -641,7 +671,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {visibleGrupos.map((grupo) => {
-              const { prof, sesiones, estudiantes, closedCount, pct } = datosTaller(grupo);
+              const { prof, sesiones, estudiantes, ocupacion, closedCount, pct } = datosTaller(grupo);
 
               return (
                 <div
@@ -688,6 +718,7 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                     <span>
                       <strong className="text-slate-900 dark:text-white font-medium">{estudiantes.length}</strong> alumnos inscritos
                     </span>
+                    <CupoBadge ocupacion={ocupacion} />
                     {currentProfile.rol === 'ADMIN' && (
                       <>
                         <span aria-hidden="true">·</span>
@@ -789,7 +820,10 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                   <SalonSelect
                     salones={salones}
                     value={aula}
-                    onChange={setAula}
+                    onChange={(v) => {
+                      setAula(v);
+                      elegirSalon(v, cupo, setCupo);
+                    }}
                     className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -807,6 +841,24 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                     placeholder={`General: ${formatearMonto(arancelGeneral())} ${etiquetaPeriodo()}`}
                     className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1" htmlFor="cupo-nuevo">
+                    Cupo máximo (alumnos) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="cupo-nuevo"
+                    type="number"
+                    min={1}
+                    step={1}
+                    required
+                    value={cupo}
+                    onChange={(e) => setCupo(e.target.value)}
+                    placeholder="Ej. 20"
+                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">Incluye las solicitudes pendientes en Caja.</p>
                 </div>
               </div>
 
@@ -952,7 +1004,10 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                   <SalonSelect
                     salones={salones}
                     value={editAula}
-                    onChange={setEditAula}
+                    onChange={(v) => {
+                      setEditAula(v);
+                      elegirSalon(v, editCupo, setEditCupo);
+                    }}
                     valorGuardado={editingGrupo?.aula}
                     className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
@@ -971,6 +1026,30 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
                     placeholder={`General: ${formatearMonto(arancelGeneral())} ${etiquetaPeriodo()}`}
                     className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1" htmlFor="cupo-editar">
+                    Cupo máximo (alumnos) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="cupo-editar"
+                    type="number"
+                    min={1}
+                    step={1}
+                    required
+                    value={editCupo}
+                    onChange={(e) => setEditCupo(e.target.value)}
+                    placeholder="Ej. 20"
+                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#1A222D] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  {editingGrupo && (
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Ahora: {storageService.ocupacionTaller(editingGrupo.id).inscritos} inscritos ·{' '}
+                      {storageService.ocupacionTaller(editingGrupo.id).pendientes} en Caja. No puede ser menor que los
+                      inscritos.
+                    </p>
+                  )}
                 </div>
               </div>
 

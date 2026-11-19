@@ -25,6 +25,7 @@ import { arancelGeneral, formatearMonto, montoDeSolicitud } from '../../utils/ar
 import { fechaLocalISO } from '../../utils/fechas';
 import { esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
+import { CupoBadge } from '../../components/CupoIndicador';
 
 interface CashierViewProps {
   currentProfile: Perfil;
@@ -577,6 +578,9 @@ export const CashierView: React.FC<CashierViewProps> = ({
                         <span className="font-semibold text-[#172033] dark:text-[#F1F5F9] block">
                           {sol.grupo_nombre}
                         </span>
+                        {sol.estado === 'PENDIENTE_CAJA' && storageService.getGrupoById(sol.grupo_id) && (
+                          <CupoBadge ocupacion={storageService.ocupacionTaller(sol.grupo_id)} className="my-0.5" />
+                        )}
                         <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                           {formatearMonto(montoDeSolicitud(sol))}
                         </span>

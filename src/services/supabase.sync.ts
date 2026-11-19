@@ -67,7 +67,7 @@ export const TABLES: Record<StorageKey, TableDef> = {
   },
   aa_grupos: {
     table: 'grupos',
-    columns: ['id', 'nombre', 'profesor_id', 'dias_semana', 'hora_inicio', 'hora_fin', 'fecha_inicio_ciclo', 'fecha_fin_ciclo', 'aula', 'color_tag', 'costo', 'creado_en'],
+    columns: ['id', 'nombre', 'profesor_id', 'dias_semana', 'hora_inicio', 'hora_fin', 'fecha_inicio_ciclo', 'fecha_fin_ciclo', 'aula', 'color_tag', 'costo', 'cupo_maximo', 'creado_en'],
     tags: ['grupos', 'alertas'],
   },
   aa_inscripciones: {
@@ -96,7 +96,7 @@ export const TABLES: Record<StorageKey, TableDef> = {
   },
   aa_configuracion: {
     table: 'configuracion',
-    columns: ['id', 'limite_ausencias_alerta', 'porcentaje_inasistencia_alerta', 'nombre_institucion', 'email_remitente', 'ciclo_academico_actual', 'plantilla_contrato', 'arancel_taller', 'arancel_periodo', 'updated_at'],
+    columns: ['id', 'limite_ausencias_alerta', 'porcentaje_inasistencia_alerta', 'nombre_institucion', 'email_remitente', 'ciclo_academico_actual', 'plantilla_contrato', 'arancel_taller', 'arancel_periodo', 'alertas_cupo', 'updated_at'],
     tags: ['config', 'alertas'],
   },
   aa_matriculas: {

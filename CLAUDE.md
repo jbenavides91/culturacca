@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-**Backend is Supabase** (Postgres + Auth + Realtime + two Edge Functions: `admin-usuarios` and `correo-matricula`), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`; `0010_grados.sql`; `0011_dias_no_lectivos.sql`; `0012_cortes_bimestrales.sql`; `0013_correo_matricula.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
+**Backend is Supabase** (Postgres + Auth + Realtime + two Edge Functions: `admin-usuarios` and `correo-matricula`), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`; `0010_grados.sql`; `0011_dias_no_lectivos.sql`; `0012_cortes_bimestrales.sql`; `0013_correo_matricula.sql`; `0014_cupo_talleres.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
 
 **Navigation is state-based, not routed.** `src/App.tsx` holds `currentTab: NavTab` (type defined in `modules/navigation/Sidebar.tsx`) and conditionally renders one view per tab. Cross-module navigation is done via callbacks passed down from `App` (e.g. `onSelectWorkshop` sets the selected group and switches to the `asistencia` tab). When adding a tab: update `NavTab`, `Sidebar`, `ROLE_CONFIGS` in `utils/rbac.ts`, and the render switch in `App.tsx`.
 
@@ -143,6 +143,36 @@ How it is enforced:
 - In Estudiantes → Editar, only ADMIN and CAJERO can change "Estado Pago Anual". For other roles, the select is disabled, a pending renewal's `estado` is kept, and the current payment values are preserved on save.
 - This is enforced in the UI and service only: RLS still lets MATRICULA write `estudiantes`.
 
+**Workshop capacity (cupo)**:
+- `grupos.cupo_maximo` (migration `0014`; integer > 0, nullable) is **required** in the Talleres create and edit forms. Choosing a catalogued room with `capacidad` pre-fills it when it is empty.
+- `crearGrupoConSesiones` validates the capacity. `actualizarGrupo` validates it only when `cupo_maximo` is in the patch, so `asignarTallerADocente` keeps working for legacy workshops. Editing refuses a capacity lower than the students already enrolled.
+- Workshops created before `0014` have `null` and show a neutral "Sin cupo" chip, with no limit, until they are edited.
+
+**Occupancy** (`storageService.ocupacionTaller(grupoId, { excluirEstudianteId?, seleccion? })` → `OcupacionTaller`):
+- Occupied = enrolled students who are not on BAJA + requests in `PENDIENTE_CAJA` / `SOLVENTE` of students who are not enrolled yet. Pending requests **reserve a spot**. Requests are matched to students by `codigo_alumno` = `estudiantes.matricula`.
+- `excluirEstudianteId` leaves out that student's own enrollment and request, so their reservation never blocks them.
+- `seleccion` replaces the current enrollments; Talleres → Alumnos uses it for a live preview.
+- Levels: `SIN_CUPO`, `LLENO` (occupied ≥ cupo), `ALERTA` (% ≥ threshold), `DISPONIBLE`.
+
+**Where it is enforced**:
+- `crearSolicitudMatricula` throws when the workshop is full.
+- `inscribirEstudianteEnGrupo` refuses when occupancy, excluding that student, is already ≥ cupo. Caja's formalization therefore always fits a request that reserved its spot, and Talleres → Alumnos cannot go over the capacity.
+- Renewals keep the student's workshop and do not change occupancy.
+
+**Color levels** (Configuración → **Cupos**, `CuposTab.tsx`, ADMIN):
+- They live in `configuracion.alertas_cupo` (jsonb: `umbral` % plus `color`/`texto` for `disponible`, `alerta`, `lleno`).
+- Read them with `storageService.alertasCupo()`, which fills in missing or invalid values from `ALERTAS_CUPO_PREDETERMINADAS`.
+- The tab edits the threshold, the colors and the labels, shows a live preview, and lists every workshop's occupancy.
+
+**Shared UI** (`src/components/CupoIndicador.tsx`):
+- `CupoBadge` ("12/15 · Por llenarse"; `compacto` shows only "12/15") and `BarraCupo` (bar plus libres and en Caja).
+- Colors come from inline `style`: the text uses the color, and the background and border use the same color with hex alpha `1A` / `55`.
+- Shown in:
+  - Talleres cards and list (via `datosTaller().ocupacion`);
+  - the enrollment wizard: full workshops are disabled, ALERTA says "Quedan N lugares", and step 3 shows the bar;
+  - Talleres → Alumnos: a header bar counting the selection; "Cupo completo" blocks checking more, and "Marcar disponibles" stops at the free spots;
+  - Caja, on pending requests.
+
 **Grados** (table `grados` with `nombre`, `orden`, `activo`; ADMIN writes; managed in Configuración → Grados / `GradosTab.tsx`) are never hard-coded. `estudiantes.grado` and `matriculas.grado` store the grade **name**, not an id.
 - To list grades, use `gradosDisponibles(actual?)` from `src/utils/grados.ts`: active grades in `orden`. Pass the current value when editing so an inactive or legacy grade is not lost. Use `indiceGrado()` to sort by grade.
 - `GRADOS_ESCOLARES` (1er–11mo) is only the fallback used when the catalogue is empty.
@@ -215,7 +245,7 @@ How it is enforced:
   - Each student card shows initials, a truncated name and tutor, alert badges, the **Anecdotario button**, compact 40 px P / A / J buttons (`h-10`, reduced from 48 px at the user's request) and a compact Rectificar.
   - The "Cerrar lista" action lives in a **sticky bottom bar** (`md:hidden`, safe-area padded, only for open, non-future sessions) with live P / A / J counts. The header and footer close buttons are `hidden md:…` on mobile.
   - The anecdotario type buttons (Comentario / Indisciplina / Logro) follow the same pattern on mobile: a 3-column grid of `h-10` buttons with `text-[11px]`. This applies both in `AnecdotarioModal` (new note) and in the edit form of `AnecdotarioAlumnoModal`; from `sm` up they keep the original wrapping layout.
-- **Configuración** tabs: Usuarios y Roles, Reglas y Parámetros (absence thresholds, institution name, cycle, fee), Salones, Grados, Días no lectivos, Cortes, Contrato.
+- **Configuración** tabs: Usuarios y Roles, Reglas y Parámetros (absence thresholds, institution name, cycle, fee), Salones, Grados, Días no lectivos, Cortes, Cupos, Contrato.
 
 **Offline/PWA**: `vite-plugin-pwa` (auto-update) plus `hooks/useOnlineStatus`, `components/OfflineIndicator`, `hooks/usePWAInstall`. The service worker is **disabled in dev** (`devOptions.enabled: false`), because a dev service worker kept serving stale bundles after frequent changes. There is no offline write queue: saving requires a connection.
 

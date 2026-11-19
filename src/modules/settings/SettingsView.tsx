@@ -25,6 +25,7 @@ import {
   FileSignature,
   DoorOpen,
   Banknote,
+  Gauge,
 } from 'lucide-react';
 import { ConfiguracionSistema, PeriodoArancel, Perfil, UserRole } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -39,10 +40,11 @@ import { SalonesTab } from './SalonesTab';
 import { GradosTab } from './GradosTab';
 import { DiasNoLectivosTab } from './DiasNoLectivosTab';
 import { CortesBimestralesTab } from './CortesBimestralesTab';
+import { CuposTab } from './CuposTab';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
-type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'dias' | 'cortes' | 'contrato';
+type SettingsTab = 'usuarios' | 'reglas' | 'salones' | 'grados' | 'dias' | 'cortes' | 'cupos' | 'contrato';
 
 interface SettingsViewProps {
   /** Abre directamente el formulario de nuevo usuario con este rol (p. ej. desde Docentes) */
@@ -375,6 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
               { id: 'grados', label: 'Grados', icono: GraduationCap },
               { id: 'dias', label: 'Días no lectivos', icono: CalendarOff },
               { id: 'cortes', label: 'Cortes', icono: CalendarRange },
+              { id: 'cupos', label: 'Cupos', icono: Gauge },
               { id: 'contrato', label: 'Contrato', icono: FileSignature },
             ] as { id: SettingsTab; label: string; icono: typeof Users }[]
           ).map(({ id, label, icono: Icono }) => (
@@ -809,6 +812,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ crearUsuarioConRol, 
 
       {/* TAB: CORTES BIMESTRALES */}
       {activeTab === 'cortes' && <CortesBimestralesTab />}
+      {activeTab === 'cupos' && <CuposTab />}
 
       {/* TAB 3: PLANTILLA DE CONTRATO */}
       {activeTab === 'contrato' && <ContractTemplateTab />}

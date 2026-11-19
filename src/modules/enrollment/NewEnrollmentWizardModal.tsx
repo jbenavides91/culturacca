@@ -26,6 +26,7 @@ import { storageService } from '../../services/storage.service';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
 import { arancelDeGrupo, etiquetaPeriodo, formatearMonto, montoDeSolicitud } from '../../utils/arancel';
 import { DigitalSignaturePad } from '../../components/DigitalSignaturePad';
+import { BarraCupo, CupoBadge } from '../../components/CupoIndicador';
 
 interface NewEnrollmentWizardModalProps {
   isOpen: boolean;
@@ -105,6 +106,15 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       }
     }
   };
+
+  /** Ocupación del taller elegido (su propia solicitud previa no cuenta) */
+  const cupoSeleccionado = (() => {
+    if (!selectedGrupoId) return null;
+    const existente = storageService
+      .getEstudiantes()
+      .find((e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase());
+    return storageService.ocupacionTaller(selectedGrupoId, { excluirEstudianteId: existente?.id });
+  })();
 
   const selectedGrupo = useMemo(() => {
     return grupos.find((g) => g.id === selectedGrupoId) || null;
@@ -192,6 +202,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
     }
     if (conflictoEvaluacion.tieneConflicto) {
       setErrorMessage(`No se puede seleccionar este taller: ${conflictoEvaluacion.motivo}`);
+      return;
+    }
+    if (cupoSeleccionado?.nivel === 'LLENO') {
+      setErrorMessage('El taller seleccionado está lleno: elige otro taller.');
       return;
     }
     setStep(3);
@@ -608,15 +622,20 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                       conflictText = c.motivo || 'Colisión de horario';
                     }
                   }
+                  // Cupo: inscritos + solicitudes en Caja (la propia del alumno no cuenta)
+                  const ocupacion = storageService.ocupacionTaller(grupo.id, { excluirEstudianteId: existing?.id });
+                  const lleno = ocupacion.nivel === 'LLENO';
+                  const bloqueado = hasConflict || lleno;
 
                   return (
                     <div
                       key={grupo.id}
                       onClick={() => {
-                        if (!hasConflict) setSelectedGrupoId(grupo.id);
+                        if (!bloqueado) setSelectedGrupoId(grupo.id);
                       }}
+                      aria-disabled={bloqueado}
                       className={`p-4 rounded-xl border-2 transition-all flex flex-col justify-between ${
-                        hasConflict
+                        bloqueado
                           ? 'opacity-60 bg-slate-50 dark:bg-slate-900/40 border-rose-300 dark:border-rose-900/40 cursor-not-allowed'
                           : isSelected
                           ? 'border-[#4F46E5] bg-indigo-50/70 dark:bg-indigo-950/40 shadow-xs cursor-pointer ring-2 ring-indigo-500/20'
@@ -625,9 +644,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between">
-                          <h5 className="font-bold text-xs text-[#172033] dark:text-[#F1F5F9]">
-                            {grupo.nombre}
-                          </h5>
+                          <div className="min-w-0 space-y-1">
+                            <h5 className="font-bold text-xs text-[#172033] dark:text-[#F1F5F9]">{grupo.nombre}</h5>
+                            <CupoBadge ocupacion={ocupacion} />
+                          </div>
                           {isSelected && (
                             <span className="w-5 h-5 rounded-full bg-[#4F46E5] text-white flex items-center justify-center shrink-0">
                               <Check className="w-3.5 h-3.5 stroke-[3]" />
@@ -652,6 +672,20 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                           </div>
                         </div>
 
+                        {lleno && (
+                          <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-[10px] text-rose-800 dark:text-rose-200 flex items-start space-x-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                            <span>
+                              Taller lleno: {ocupacion.ocupados}/{ocupacion.cupo} lugares
+                              {ocupacion.pendientes ? ` (incluye ${ocupacion.pendientes} en Caja)` : ''}. No acepta más matrículas.
+                            </span>
+                          </div>
+                        )}
+                        {!lleno && ocupacion.nivel === 'ALERTA' && (
+                          <p className="text-[10px] font-semibold" style={{ color: storageService.alertasCupo().alerta.color }}>
+                            Quedan {ocupacion.libres} {ocupacion.libres === 1 ? 'lugar' : 'lugares'}
+                          </p>
+                        )}
                         {hasConflict && (
                           <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-[10px] text-rose-800 dark:text-rose-200 flex items-start space-x-1.5">
                             <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
@@ -684,7 +718,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 <button
                   type="button"
                   onClick={handleValidateStep2}
-                  disabled={!selectedGrupoId || conflictoEvaluacion.tieneConflicto}
+                  disabled={!selectedGrupoId || conflictoEvaluacion.tieneConflicto || cupoSeleccionado?.nivel === 'LLENO'}
                   className="px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
                 >
                   <span>Continuar a Contrato y Firma</span>
@@ -706,6 +740,16 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   Lea el contrato generado con los datos de matrícula. El padre o tutor debe firmar en el recuadro interactivo.
                 </p>
               </div>
+
+              {/* Cupo del taller elegido */}
+              {selectedGrupo && cupoSeleccionado && (
+                <div className="p-3 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D]">
+                  <p className="text-[11px] font-semibold text-[#172033] dark:text-[#F1F5F9] mb-1.5">
+                    Cupo de {selectedGrupo.nombre}
+                  </p>
+                  <BarraCupo ocupacion={cupoSeleccionado} />
+                </div>
+              )}
 
               {/* Readonly Contract Scroll Box */}
               <div className="p-4 bg-[#F7F8FA] dark:bg-[#151A22] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] max-h-56 overflow-y-auto font-mono text-[11px] leading-relaxed text-[#172033] dark:text-[#F1F5F9] whitespace-pre-line select-text border-l-4 border-l-[#4F46E5]">

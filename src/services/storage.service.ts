@@ -1,5 +1,7 @@
 import {
   AlertaEstudiante,
+  AlertasCupo,
+  OcupacionTaller,
   Anotacion,
   Asistencia,
   ConfiguracionSistema,
@@ -117,6 +119,16 @@ const DEFAULT_CONFIG: ConfiguracionSistema = {
   updated_at: new Date().toISOString(),
 };
 
+/** Niveles de ocupación predeterminados (los mismos que el default de la migración 0014) */
+export const ALERTAS_CUPO_PREDETERMINADAS: AlertasCupo = {
+  umbral: 80,
+  disponible: { color: '#16A34A', texto: 'Disponible' },
+  alerta: { color: '#F59E0B', texto: 'Por llenarse' },
+  lleno: { color: '#DC2626', texto: 'Lleno' },
+};
+
+const COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
+
 class StorageService {
   /** Perfil con sesión iniciada (lo fija auth.service); firma la bitácora de movimientos */
   private perfilActual: Pick<Perfil, 'id' | 'rol'> | null = null;
@@ -176,6 +188,84 @@ class StorageService {
     return updated;
   }
 
+  // --- CUPOS DE LOS TALLERES ---
+
+  /** Umbral y estilo de los niveles de ocupación, completando lo que falte con los predeterminados */
+  alertasCupo(): AlertasCupo {
+    const c = this.getConfiguracion().alertas_cupo;
+    const d = ALERTAS_CUPO_PREDETERMINADAS;
+    const nivel = (k: 'disponible' | 'alerta' | 'lleno') => ({
+      color: c?.[k]?.color && COLOR_HEX.test(c[k].color) ? c[k].color : d[k].color,
+      texto: c?.[k]?.texto?.trim() || d[k].texto,
+    });
+    const umbral = Number(c?.umbral);
+    return {
+      umbral: umbral >= 1 && umbral <= 99 ? umbral : d.umbral,
+      disponible: nivel('disponible'),
+      alerta: nivel('alerta'),
+      lleno: nivel('lleno'),
+    };
+  }
+
+  /**
+   * Ocupación de un taller: inscritos (alumnos que no están de baja) + solicitudes en Caja
+   * (PENDIENTE_CAJA o SOLVENTE) de alumnos aún no inscritos, que reservan su lugar.
+   * `excluirEstudianteId` deja fuera a ese alumno (su inscripción y su solicitud): sirve para saber
+   * si a él le queda lugar sin que su propia reserva lo bloquee. `seleccion` sustituye a los
+   * inscritos actuales (vista previa de Talleres → Alumnos).
+   */
+  ocupacionTaller(
+    grupoId: string,
+    opciones: { excluirEstudianteId?: string; seleccion?: string[] } = {}
+  ): OcupacionTaller {
+    const grupo = this.getGrupoById(grupoId);
+    const cupoNum = Number(grupo?.cupo_maximo);
+    const cupo = Number.isInteger(cupoNum) && cupoNum > 0 ? cupoNum : null;
+
+    const estudiantes = this.getEstudiantes();
+    const porId = new Map(estudiantes.map((e) => [e.id, e]));
+    const porMatricula = new Map(estudiantes.map((e) => [e.matricula.trim().toUpperCase(), e]));
+
+    const idsInscritos = new Set(
+      opciones.seleccion ??
+        this.getInscripciones()
+          .filter((i) => i.grupo_id === grupoId)
+          .map((i) => i.estudiante_id)
+    );
+    if (opciones.excluirEstudianteId) idsInscritos.delete(opciones.excluirEstudianteId);
+    const inscritos = [...idsInscritos].filter((id) => porId.get(id)?.estado !== 'BAJA').length;
+
+    const pendientes = this.getSolicitudesMatricula().filter((sol) => {
+      if (sol.grupo_id !== grupoId || (sol.estado !== 'PENDIENTE_CAJA' && sol.estado !== 'SOLVENTE')) return false;
+      const est = porMatricula.get(String(sol.codigo_alumno || '').trim().toUpperCase());
+      if (est && est.id === opciones.excluirEstudianteId) return false;
+      return !est || !idsInscritos.has(est.id); // si ya está inscrito no ocupa dos lugares
+    }).length;
+
+    const ocupados = inscritos + pendientes;
+    if (cupo === null) {
+      return { cupo, inscritos, pendientes, ocupados, libres: null, porcentaje: 0, nivel: 'SIN_CUPO' };
+    }
+    const porcentaje = Math.round((ocupados / cupo) * 100);
+    const nivel = ocupados >= cupo ? 'LLENO' : porcentaje >= this.alertasCupo().umbral ? 'ALERTA' : 'DISPONIBLE';
+    return { cupo, inscritos, pendientes, ocupados, libres: Math.max(cupo - ocupados, 0), porcentaje, nivel };
+  }
+
+  /** Cupo obligatorio: entero mayor que 0, y no menor que los alumnos ya inscritos */
+  private validarCupo(grupo: Grupo, esNuevo: boolean): void {
+    const cupo = Number(grupo.cupo_maximo);
+    if (!Number.isInteger(cupo) || cupo <= 0) {
+      throw new Error('Indica el cupo máximo del taller: un número entero de alumnos mayor que 0.');
+    }
+    if (esNuevo) return;
+    const { inscritos } = this.ocupacionTaller(grupo.id);
+    if (cupo < inscritos) {
+      throw new Error(
+        `El taller ya tiene ${inscritos} alumnos inscritos: el cupo no puede ser menor. Desinscribe alumnos primero (Talleres → Alumnos).`
+      );
+    }
+  }
+
   // --- GRUPOS ---
   getGrupos(): Grupo[] {
     const cached = cacheService.get<Grupo[]>('grupos_all');
@@ -205,6 +295,7 @@ class StorageService {
       creado_en,
     };
 
+    this.validarCupo(nuevoGrupo, true);
     this.asegurarCalendarioDeTaller(nuevoGrupo);
     this.verificarChoqueSalon(nuevoGrupo);
     this.verificarChoqueDocente(nuevoGrupo);
@@ -250,6 +341,8 @@ class StorageService {
       creado_en: anterior.creado_en,
     };
 
+    // El cupo se valida cuando se edita (los talleres anteriores pueden no tenerlo aún)
+    if ('cupo_maximo' in data) this.validarCupo(updatedGrupo, false);
     this.asegurarCalendarioDeTaller(updatedGrupo);
     this.verificarChoqueSalon(updatedGrupo);
     this.verificarChoqueDocente(updatedGrupo);
@@ -731,6 +824,15 @@ class StorageService {
     const solvencia = this.estadoSolvencia(estudiante);
     if (!solvencia.solvente) {
       return { success: false, error: solvencia.motivo };
+    }
+
+    // Cupo: cuentan los demás inscritos y las solicitudes en Caja de otros alumnos
+    const ocupacion = this.ocupacionTaller(grupoId, { excluirEstudianteId: estudianteId });
+    if (ocupacion.cupo !== null && ocupacion.ocupados >= ocupacion.cupo) {
+      return {
+        success: false,
+        error: `Taller lleno (${ocupacion.ocupados}/${ocupacion.cupo}, incluye ${ocupacion.pendientes} en Caja)`,
+      };
     }
 
     // Validar conflicto de horario
@@ -2467,6 +2569,14 @@ class StorageService {
     const existingStudent = this.getEstudiantes().find(
       (e) => e.matricula.trim().toUpperCase() === datos.codigo_alumno.trim().toUpperCase()
     );
+
+    // Cupo: un taller lleno no acepta más solicitudes (las pendientes en Caja reservan lugar)
+    const ocupacion = this.ocupacionTaller(grupo.id, { excluirEstudianteId: existingStudent?.id });
+    if (ocupacion.cupo !== null && ocupacion.ocupados >= ocupacion.cupo) {
+      throw new Error(
+        `El taller "${grupo.nombre}" está lleno (${ocupacion.ocupados}/${ocupacion.cupo}, incluidas ${ocupacion.pendientes} solicitudes pendientes en Caja).`
+      );
+    }
 
     if (existingStudent) {
       const conflicto = this.verificarConflictoHorario(existingStudent.id, grupo);

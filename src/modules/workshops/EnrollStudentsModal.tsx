@@ -15,6 +15,7 @@ import { indiceGrado } from '../../utils/grados';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 import { storageService } from '../../services/storage.service';
+import { BarraCupo } from '../../components/CupoIndicador';
 
 interface EnrollStudentsModalProps {
   isOpen: boolean;
@@ -212,6 +213,13 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
     selectedIds,
   ]);
 
+  // Cupo con la selección actual (inscritos marcados + solicitudes en Caja de otros alumnos)
+  const ocupacion = useMemo(
+    () => (grupo ? storageService.ocupacionTaller(grupo.id, { seleccion: Array.from(selectedIds) }) : null),
+    [grupo, selectedIds]
+  );
+  const cupoLleno = !!ocupacion && ocupacion.cupo !== null && ocupacion.ocupados >= ocupacion.cupo;
+
   // Overall counters
   const totalCount = studentEvaluations.length;
   const availableCount = studentEvaluations.filter((i) => !i.bloqueado).length;
@@ -243,17 +251,22 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
     if (newSet.has(estudianteId)) {
       newSet.delete(estudianteId);
     } else {
-      if (bloqueado) return;
+      if (bloqueado || cupoLleno) return;
       newSet.add(estudianteId);
     }
     setSelectedIds(newSet);
   };
 
+  /** Marca los disponibles filtrados sin pasar del cupo */
   const handleSelectFilteredAvailable = () => {
     const newSet = new Set(selectedIds);
-    filteredAvailable.forEach((item) => {
+    let libres = ocupacion && ocupacion.libres !== null ? ocupacion.libres : Infinity;
+    for (const item of filteredAvailable) {
+      if (newSet.has(item.estudiante.id)) continue;
+      if (libres <= 0) break;
       newSet.add(item.estudiante.id);
-    });
+      libres--;
+    }
     setSelectedIds(newSet);
   };
 
@@ -333,6 +346,18 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Cupo del taller con la selección actual */}
+        {ocupacion && (
+          <div className="px-4 sm:px-6 py-2.5 border-b border-slate-100 dark:border-slate-800/80 shrink-0">
+            <BarraCupo ocupacion={ocupacion} />
+            {cupoLleno && (
+              <p className="mt-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                Cupo completo: desmarca a alguien para incluir a otro alumno.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Minimalist Controls Toolbar */}
         <div className="px-4 sm:px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 shrink-0 space-y-2.5">
@@ -465,7 +490,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
             {/* Quick Batch Actions */}
             <div className="flex items-center gap-3 text-xs">
-              {filteredAvailableCount > 0 && (
+              {filteredAvailableCount > 0 && !cupoLleno && (
                 <button
                   type="button"
                   onClick={handleSelectFilteredAvailable}
@@ -508,7 +533,8 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
           ) : (
             filteredEvaluations.map((item) => {
               const isSelected = selectedIds.has(item.estudiante.id);
-              const isDisabled = item.bloqueado && !isSelected;
+              const sinLugar = cupoLleno && !isSelected && !item.bloqueado;
+              const isDisabled = (item.bloqueado || cupoLleno) && !isSelected;
 
               return (
                 <div
@@ -617,6 +643,8 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
                     {isDisabled ? (
                       item.hasConflict ? (
                         <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">Ocupado</span>
+                      ) : sinLugar ? (
+                        <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">Cupo completo</span>
                       ) : (
                         <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">Sin pago</span>
                       )

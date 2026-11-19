@@ -79,6 +79,8 @@ export interface Grupo {
   color_tag?: string;
   /** Arancel propio del taller (C$). Si no se indica, se usa el arancel general de Configuración */
   costo?: number;
+  /** Alumnos que acepta el taller (inscritos + solicitudes en Caja). Null = taller anterior sin cupo */
+  cupo_maximo?: number | null;
   creado_en: string;
 }
 
@@ -288,7 +290,36 @@ export interface ConfiguracionSistema {
   arancel_taller: number;
   /** Periodo al que corresponde el arancel */
   arancel_periodo: PeriodoArancel;
+  /** Niveles de ocupación de los talleres (Configuración → Cupos) */
+  alertas_cupo?: AlertasCupo;
   updated_at: string;
+}
+
+/** Nivel de ocupación de un taller */
+export type NivelCupo = 'SIN_CUPO' | 'DISPONIBLE' | 'ALERTA' | 'LLENO';
+
+export interface EstiloNivelCupo {
+  color: string; // #RRGGBB
+  texto: string;
+}
+
+/** Umbral (% de ocupación desde el que el taller está "por llenarse") y estilo de cada nivel */
+export interface AlertasCupo {
+  umbral: number;
+  disponible: EstiloNivelCupo;
+  alerta: EstiloNivelCupo;
+  lleno: EstiloNivelCupo;
+}
+
+/** Ocupación de un taller: inscritos (no de baja) + solicitudes en Caja, que reservan lugar */
+export interface OcupacionTaller {
+  cupo: number | null;
+  inscritos: number;
+  pendientes: number;
+  ocupados: number;
+  libres: number | null;
+  porcentaje: number;
+  nivel: NivelCupo;
 }
 
 export interface AlertaEstudiante {
