@@ -31,23 +31,8 @@ import { fechaLocalISO } from '../../utils/fechas';
 import { ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
-type EstadoSesionUI = 'CERRADA' | 'HOY' | 'PENDIENTE' | 'PROGRAMADA';
-
-/** Estado visual de una sesión según la fecha y hora LOCAL actuales */
-const estadoSesion = (s: Sesion): { estado: EstadoSesionUI; texto: string } => {
-  if (s.cerrada) return { estado: 'CERRADA', texto: 'Lista formalizada' };
-  const ahora = new Date();
-  const hoy = fechaLocalISO(ahora);
-  if (s.fecha === hoy) {
-    const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-    return {
-      estado: 'HOY',
-      texto: s.hora_inicio > horaActual ? `Hoy · inicia ${s.hora_inicio}` : 'En curso (Hoy)',
-    };
-  }
-  if (s.fecha < hoy) return { estado: 'PENDIENTE', texto: 'Sin cerrar' };
-  return { estado: 'PROGRAMADA', texto: 'Programada' };
-};
+import { agruparPorMes, estadoSesion, formatSessionDate, sesionPorDefecto } from './sesiones.shared';
+import { SesionesPorMes } from './SesionesPorMes';
 import {
   AlertaEstudiante,
   Asistencia,
@@ -109,6 +94,18 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
   const [conteoAnotaciones, setConteoAnotaciones] = useState<Map<string, number>>(new Map());
   const [sessionPickerOpen, setSessionPickerOpen] = useState(false);
   const sessionPickerRef = useRef<HTMLDivElement>(null);
+  const sesionElegidaRef = useRef<HTMLButtonElement>(null);
+  const listaSesionesRef = useRef<HTMLDivElement>(null);
+
+  // Al abrir el calendario de clases, centrar la sesión elegida (solo se desplaza la lista, no la página)
+  useEffect(() => {
+    const lista = listaSesionesRef.current;
+    const fila = sesionElegidaRef.current;
+    if (!sessionPickerOpen || !lista || !fila) return;
+    const desplazamiento =
+      fila.getBoundingClientRect().top - lista.getBoundingClientRect().top + lista.scrollTop;
+    lista.scrollTop = Math.max(0, desplazamiento - lista.clientHeight / 2 + fila.offsetHeight / 2);
+  }, [sessionPickerOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -149,13 +146,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
       // Por defecto: la sesión de hoy; si hoy no hay clase, la última pasada sin cerrar
       // (la futura estaría bloqueada); si no, la próxima; si no, la última
       if (!selectedSesionId || !gSesiones.some((s) => s.id === selectedSesionId)) {
-        const hoy = fechaLocalISO();
-        const pendientesPasadas = gSesiones.filter((s) => s.fecha < hoy && !s.cerrada);
-        const porDefecto =
-          gSesiones.find((s) => s.fecha === hoy) ||
-          pendientesPasadas[pendientesPasadas.length - 1] ||
-          gSesiones.find((s) => s.fecha > hoy) ||
-          gSesiones[gSesiones.length - 1];
+        const porDefecto = sesionPorDefecto(gSesiones);
         if (porDefecto) {
           setSelectedSesionId(porDefecto.id);
         }
@@ -183,37 +174,12 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
   const activeGrupo = grupos.find((g) => g.id === selectedGrupoId) || null;
   const activeSesion = sesiones.find((s) => s.id === selectedSesionId) || null;
+  const mesesDelTaller = useMemo(() => agruparPorMes(sesiones), [sesiones]);
 
   // Session navigation & date formatting
   const currentSesionIndex = useMemo(() => {
     return sesiones.findIndex((s) => s.id === selectedSesionId);
   }, [sesiones, selectedSesionId]);
-
-  const formatSessionDate = (dateStr: string) => {
-    if (!dateStr) return { dayName: '', dayNum: 0, monthName: '', fullDate: '', shortDate: '' };
-    const parts = dateStr.split('-');
-    if (parts.length < 3) return { dayName: '', dayNum: 0, monthName: '', fullDate: dateStr, shortDate: dateStr };
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10);
-    const day = parseInt(parts[2], 10);
-    const dateObj = new Date(year, month - 1, day);
-
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const monthNames = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-    ];
-    const monthShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
-    const dIndex = dateObj.getDay();
-    return {
-      dayName: dayNames[dIndex] || '',
-      dayNum: day,
-      monthName: monthShort[month - 1] || '',
-      fullDate: `${dayNames[dIndex] || ''}, ${day} de ${monthNames[month - 1] || ''} de ${year}`,
-      shortDate: `${day} ${monthShort[month - 1] || ''}`,
-    };
-  };
 
   const activeDateInfo = useMemo(() => {
     return formatSessionDate(activeSesion?.fecha || '');
@@ -614,8 +580,19 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="max-h-72 overflow-y-auto divide-y divide-[#E7EAF0]/60 dark:divide-[#2B3442]/60">
-                    {sesiones.map((s, idx) => {
+                  <div ref={listaSesionesRef} className="max-h-80 overflow-y-auto">
+                    {mesesDelTaller.map((m) => (
+                    <div key={m.mes}>
+                    <div className="sticky top-0 z-10 px-2.5 py-1.5 bg-white/95 dark:bg-[#1B222D]/95 backdrop-blur-sm border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-[#172033] dark:text-[#F1F5F9]">{m.etiqueta}</span>
+                      <span className="text-[#667085] dark:text-[#94A3B8]">
+                        {m.sesiones.length} clases · {m.cerradas} cerradas
+                        {m.pendientes > 0 && <span className="text-amber-700 dark:text-amber-400"> · {m.pendientes} pend.</span>}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-[#E7EAF0]/60 dark:divide-[#2B3442]/60">
+                    {m.sesiones.map((s) => {
+                      const idx = sesiones.indexOf(s);
                       const isSelected = s.id === selectedSesionId;
                       const sDate = formatSessionDate(s.fecha);
                       const rate = getSessionAttendanceRate(s.id);
@@ -623,6 +600,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                       return (
                         <button
                           key={s.id}
+                          ref={isSelected ? sesionElegidaRef : undefined}
                           onClick={() => {
                             setSelectedSesionId(s.id);
                             setSessionPickerOpen(false);
@@ -693,6 +671,9 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                         </button>
                       );
                     })}
+                    </div>
+                    </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -764,102 +745,14 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
           </div>
         </div>
 
-        {/* Row 3 (móvil): fecha y barra de avance compacta en lugar del riel con todas las sesiones */}
-        <div className="sm:hidden space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-[11px] text-[#667085] dark:text-[#94A3B8]">
-            <span className="font-semibold text-[#172033] dark:text-[#F1F5F9] capitalize truncate">{activeDateInfo.fullDate}</span>
-            <span className="tabular-nums shrink-0">
-              {Math.round(((currentSesionIndex + 1) / Math.max(sesiones.length, 1)) * 100)}% del ciclo
-            </span>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div
-              className="h-1.5 rounded-full bg-[#4F46E5] dark:bg-[#818CF8] transition-all duration-300"
-              style={{ width: `${((currentSesionIndex + 1) / Math.max(sesiones.length, 1)) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Row 3: Modern Linear Academic Progress Rail (Linear / Stripe style) */}
-        <div className="pt-2 hidden sm:block">
-          {/* Rail Header with Progress Percentage */}
-          <div className="flex items-center justify-between text-xs mb-3">
-            <div className="flex items-center space-x-2 text-[#667085] dark:text-[#94A3B8]">
-              <span className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
-                {activeDateInfo.fullDate}
-              </span>
-              <span>•</span>
-              <span>
-                {currentSesionIndex + 1} de {sesiones.length} sesiones ({Math.round(((currentSesionIndex + 1) / Math.max(sesiones.length, 1)) * 100)}% de avance)
-              </span>
-            </div>
-
-            <button
-              onClick={() => setSessionPickerOpen(!sessionPickerOpen)}
-              className="text-xs text-[#4F46E5] dark:text-[#818CF8] hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
-            >
-              <span>Ver todas las fechas</span>
-              <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* Elegant Linear Rail Nodes */}
-          <div className="relative flex items-center justify-between px-2 py-1">
-            {/* Background Connecting Line */}
-            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-slate-100 dark:bg-slate-800 rounded-full z-0" />
-            
-            {/* Colored Progress Line up to current session */}
-            <div
-              className="absolute left-4 top-1/2 -translate-y-1/2 h-1 bg-[#4F46E5] dark:bg-[#818CF8] rounded-full transition-all duration-300 z-0"
-              style={{
-                width: `${(currentSesionIndex / Math.max(sesiones.length - 1, 1)) * 100}%`,
-                maxWidth: 'calc(100% - 32px)',
-              }}
-            />
-
-            {/* Interactive Nodes */}
-            {sesiones.map((s, idx) => {
-              const isSelected = s.id === selectedSesionId;
-              const sDate = formatSessionDate(s.fecha);
-
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSesionId(s.id)}
-                  title={`Clase ${idx + 1}: ${sDate.fullDate || s.fecha} (${s.cerrada ? 'Concluida' : 'Abierta'})`}
-                  className="relative z-10 flex flex-col items-center group transition cursor-pointer"
-                >
-                  <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
-                      isSelected
-                        ? 'bg-[#4F46E5] text-white ring-4 ring-indigo-500/25 shadow-md scale-110'
-                        : s.cerrada
-                        ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600'
-                        : 'bg-white dark:bg-[#1B222D] text-slate-400 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                    }`}
-                  >
-                    {s.cerrada && !isSelected ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[3]" />
-                    ) : (
-                      <span>{idx + 1}</span>
-                    )}
-                  </div>
-
-                  {/* Minimalist Day label below node */}
-                  <span
-                    className={`text-[10px] font-medium mt-1 whitespace-nowrap transition-colors hidden sm:block ${
-                      isSelected
-                        ? 'text-[#4F46E5] dark:text-[#818CF8] font-bold'
-                        : 'text-[#667085] dark:text-[#94A3B8] group-hover:text-[#172033] dark:group-hover:text-white'
-                    }`}
-                  >
-                    {sDate.shortDate}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Row 3: sesiones del taller agrupadas por mes (siempre caben, con barra del ciclo) */}
+        <SesionesPorMes
+          sesiones={sesiones}
+          selectedSesionId={selectedSesionId}
+          onSelect={setSelectedSesionId}
+          onVerTodas={() => setSessionPickerOpen(true)}
+          tasaAsistencia={getSessionAttendanceRate}
+        />
       </div>
 
       {/* Session Real-time Metrics Bar (Stripe / Linear style) */}

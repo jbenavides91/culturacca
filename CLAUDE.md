@@ -321,6 +321,9 @@ Callers:
   - The "Con Alertas" filter counts the current cut.
   - A renewal sends the email only when a tutor address was typed. The form fills in a placeholder address when it is left empty, and that placeholder never receives mail.
 - **Toma de Asistencia** (`RollCallView`): the session picker labels each session with `estadoSesion` (Cerrada / Hoy / Pendiente / Programada) using local date and time. The default session is today's, else the latest past session that is not closed, else the next one, else the last. When the workshop has no class today, an info banner says so (naming the non-teaching day, if any). Past sessions are never locked; only future ones are. Each student row has an Anecdotario column.
+  - `estadoSesion`, `formatSessionDate`, `sesionPorDefecto` (the default-session rule above) and `agruparPorMes` live in `src/modules/attendance/sesiones.shared.ts` (pure; dates read from the `YYYY-MM-DD` text).
+  - **Sessions are browsed by month** (`SesionesPorMes.tsx`), because a workshop has 60+ sessions a year and a single row of every session overflowed the screen. It shows ◀ month ▶ (only months with sessions), a **Hoy** button (`sesionPorDefecto`), "Sesión N de M · X cerradas · Y pendientes" and "Ver todas las fechas". Below that it shows the visible month's sessions as 44 px chips (`flex-wrap`, so they always fit), colored by state: emerald with ✓ closed, amber past and not closed, emerald ring today, grey outline scheduled, solid indigo selected, with a violet dot for extra and a rose dot for non-teaching days. From `sm` up it adds a cycle bar with one segment per month (closed and pending proportions; a click changes only the visible month) and a legend. The visible month follows the selected session.
+  - The "Calendario de Clases" popover (stepper button or "Ver todas las fechas") groups sessions by month under sticky headers and, on open, centers the selected session by scrolling the list only, not the page.
   - The alert badges and the "En Riesgo" filter count the **current cut**.
   - An amber **"Pago pendiente"** badge marks enrolled students who are not solvent (`estadoSolvencia`), such as a pending renewal. Their attendance can still be taken.
   - ADMIN and the group's PROFESOR can add an extraordinary session.
@@ -328,7 +331,7 @@ Callers:
   Below `sm`/`md` the view has its own mobile layout:
   - The header puts the workshop select (truncated) and an icon-only Excel button on one row.
   - The session stepper is full width, with 40 px or larger arrows.
-  - The rail with every session node is replaced by the full date plus a thin cycle-progress bar.
+  - The month browser shows its chips in at most two rows, without the cycle bar or legend.
   - Metrics are a single row of 4 counters (P / A / J / %). "Matriculados" is hidden there because the header already shows it.
   - Filter chips scroll horizontally.
   - Each student card shows initials, a truncated name and tutor, alert badges, the **Anecdotario button**, compact 40 px P / A / J buttons (`h-10`, reduced from 48 px at the user's request) and a compact Rectificar.
