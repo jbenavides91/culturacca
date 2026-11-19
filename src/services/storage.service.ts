@@ -1278,16 +1278,50 @@ class StorageService {
 
   // --- VISTA CALCULADA DE ALERTAS (vista_alerta_estudiantes) ---
   /**
-   * Alertas por alumno y taller. Sin `rango` cuenta todas las sesiones cerradas del ciclo;
-   * con `rango` (fechas YYYY-MM-DD, ambas opcionales) solo las sesiones cerradas en esas fechas,
-   * y los umbrales de Configuración se aplican sobre ese período.
+   * Corte que rige en una fecha (los contadores de faltas e indisciplina se reinician en cada corte):
+   * el que la contiene; si cae entre cortes (vacaciones), el último que ya empezó. `null` si no hay
+   * cortes o la fecha es anterior al primero: entonces se cuenta todo el ciclo, para no ocultar
+   * la asistencia tomada antes de que empiece el primer corte.
+   */
+  corteVigente(fecha: string = fechaLocalISO()): CorteBimestral | null {
+    const cortes = this.getCortes();
+    return (
+      cortes.find((c) => c.fecha_inicio <= fecha && fecha <= c.fecha_fin) ??
+      [...cortes].reverse().find((c) => c.fecha_inicio <= fecha) ??
+      null
+    );
+  }
+
+  /** Rango del corte vigente, o `undefined` si no hay cortes (entonces se cuenta todo el ciclo) */
+  rangoCorteVigente(): { desde: string; hasta: string } | undefined {
+    const corte = this.corteVigente();
+    return corte ? { desde: corte.fecha_inicio, hasta: corte.fecha_fin } : undefined;
+  }
+
+  /**
+   * Alertas por alumno y taller dentro de un período. Los contadores se reinician en cada corte:
+   * sin `rango` se usa el corte vigente (`rangoCorteVigente()`); `{}` cuenta todo el ciclo; con
+   * fechas YYYY-MM-DD (ambas opcionales) solo las sesiones cerradas en ese rango. Los umbrales de
+   * Configuración se aplican sobre el período. `total_indisciplina` cuenta las anotaciones
+   * INDISCIPLINA visibles (un docente solo descarga las suyas) del alumno en ese taller y período.
    */
   calcularAlertasEstudiantes(grupoId?: string, rango?: { desde?: string; hasta?: string }): AlertaEstudiante[] {
-    const desde = rango?.desde || '0000-01-01';
-    const hasta = rango?.hasta || '9999-12-31';
-    const cacheKey = `alertas_${grupoId || 'todas'}${rango ? `_${desde}_${hasta}` : ''}`;
+    const periodo = rango ?? this.rangoCorteVigente() ?? {};
+    const desde = periodo.desde || '0000-01-01';
+    const hasta = periodo.hasta || '9999-12-31';
+    const cacheKey = `alertas_${grupoId || 'todas'}_${desde}_${hasta}`;
     const cached = cacheService.get<AlertaEstudiante[]>(cacheKey);
     if (cached) return cached;
+
+    // Indisciplina por alumno y taller (fecha local de creación dentro del período)
+    const indisciplina = new Map<string, number>();
+    this.getAnecdotario().forEach((n) => {
+      if (n.tipo !== 'INDISCIPLINA' || !n.grupo_id) return;
+      const fecha = fechaLocalISO(new Date(n.creado_en));
+      if (fecha < desde || fecha > hasta) return;
+      const clave = `${n.estudiante_id}|${n.grupo_id}`;
+      indisciplina.set(clave, (indisciplina.get(clave) ?? 0) + 1);
+    });
 
     const config = this.getConfiguracion();
     const grupos = grupoId ? [this.getGrupoById(grupoId)!].filter(Boolean) : this.getGrupos();
@@ -1368,6 +1402,7 @@ class StorageService {
           total_ausencias: totalAusencias,
           total_justificadas: totalJustificadas,
           porcentaje_inasistencia: porcentajeInasistencia,
+          total_indisciplina: indisciplina.get(`${estudiante.id}|${grupo.id}`) ?? 0,
           tiene_alerta: tieneAlerta,
           nivel_alerta: nivelAlerta,
         });
@@ -1375,7 +1410,7 @@ class StorageService {
     });
 
     // Guardar en caché con TTL de 30 segundos
-    cacheService.set(cacheKey, alertas, 30000, ['alertas', 'asistencias']);
+    cacheService.set(cacheKey, alertas, 30000, ['alertas', 'asistencias', 'anecdotario', 'cortes']);
     return alertas;
   }
 

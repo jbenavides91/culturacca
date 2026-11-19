@@ -961,6 +961,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
 
           <button
             onClick={() => setStatusFilter('ALERTAS')}
+            title="Alumnos con alerta de inasistencia en el bimestre vigente (los contadores se reinician en cada corte)"
             className={`shrink-0 px-2.5 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === 'ALERTAS'
                 ? 'bg-white dark:bg-[#141A23] text-rose-700 dark:text-rose-300 shadow-2xs font-semibold'
@@ -1066,7 +1067,7 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                                 </span>
                               )}
                               {alerta?.nivel_alerta === 'CRITICA' && (
-                                <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                                <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400" title="Faltas en el bimestre vigente">
                                   {alerta.total_ausencias} Faltas
                                 </span>
                               )}

@@ -7,11 +7,12 @@ import { finDeMes, inicioDeMes, lunesDe, sumarDias } from './attendanceStatus.sh
 import { compararTexto, esAlfabetico, ordenarAlfabetico, type Orden } from '../../utils/orden';
 import { OrdenSelector } from '../../components/OrdenSelector';
 
-type Periodo = 'semana' | 'mes' | 'ciclo' | 'rango';
+type Periodo = 'semana' | 'mes' | 'bimestre' | 'ciclo' | 'rango';
 
 const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'semana', label: 'Semana' },
   { id: 'mes', label: 'Mes' },
+  { id: 'bimestre', label: 'Bimestre' },
   { id: 'ciclo', label: 'Ciclo' },
   { id: 'rango', label: 'Rango' },
 ];
@@ -25,14 +26,17 @@ interface Filtros {
   grupoId: string; // 'TODOS' o id del taller
 }
 
-const FILTROS_INICIALES: Filtros = { periodo: 'ciclo', desde: '', hasta: '', grupoId: 'TODOS' };
+// Los contadores se reinician en cada corte: por defecto se monitorea el bimestre vigente
+const FILTROS_INICIALES: Filtros = { periodo: 'bimestre', desde: '', hasta: '', grupoId: 'TODOS' };
 
 const leerFiltros = (): Filtros => {
   try {
     const f = JSON.parse(localStorage.getItem(CLAVE_FILTROS) || 'null') as Partial<Filtros> | null;
     if (!f) return FILTROS_INICIALES;
     return {
-      periodo: PERIODOS.some((p) => p.id === f.periodo) ? (f.periodo as Periodo) : 'ciclo',
+      // "ciclo" era el valor por defecto antes del reinicio por corte: se migra al bimestre
+      periodo:
+        f.periodo === 'ciclo' || !PERIODOS.some((p) => p.id === f.periodo) ? 'bimestre' : (f.periodo as Periodo),
       desde: typeof f.desde === 'string' ? f.desde : '',
       hasta: typeof f.hasta === 'string' ? f.hasta : '',
       grupoId: typeof f.grupoId === 'string' ? f.grupoId : 'TODOS',
@@ -75,7 +79,7 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
     const m = new Map(perfiles.map((p) => [p.id, `${p.nombre} ${p.apellido}`.trim()]));
     return (id: string) => m.get(id);
   }, [perfiles]);
-  const hayFiltros = periodo !== 'ciclo' || grupoSel !== 'TODOS';
+  const hayFiltros = periodo !== 'bimestre' || grupoSel !== 'TODOS';
 
   useEffect(() => {
     try {
@@ -88,7 +92,8 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
   const actualizar = (cambios: Partial<Filtros>) => setFiltros((f) => ({ ...f, ...cambios }));
 
   const hoyStr = fechaLocalISO(new Date());
-  const rango = useMemo<{ desde?: string; hasta?: string } | undefined>(() => {
+  const corte = periodo === 'bimestre' ? storageService.corteVigente() : null;
+  const rango = useMemo<{ desde?: string; hasta?: string }>(() => {
     switch (periodo) {
       case 'semana': {
         const lunes = lunesDe(hoyStr);
@@ -98,10 +103,12 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
         return { desde: inicioDeMes(hoyStr), hasta: finDeMes(hoyStr) };
       case 'rango':
         return { desde: desde || undefined, hasta: hasta || undefined };
+      case 'bimestre':
+        return corte ? { desde: corte.fecha_inicio, hasta: corte.fecha_fin } : {};
       default:
-        return undefined; // todo el ciclo
+        return {}; // todo el ciclo
     }
-  }, [periodo, desde, hasta, hoyStr]);
+  }, [periodo, desde, hasta, hoyStr, corte?.fecha_inicio, corte?.fecha_fin]);
 
   const rangoInvalido = periodo === 'rango' && !!desde && !!hasta && hasta < desde;
 
@@ -131,6 +138,8 @@ export const AbsenteeismMonitorCard: React.FC<AbsenteeismMonitorCardProps> = ({
   const textoPeriodo =
     periodo === 'ciclo'
       ? 'Todo el ciclo'
+      : periodo === 'bimestre' && corte
+      ? `${corte.nombre} (${fechaCorta(corte.fecha_inicio)} – ${fechaCorta(corte.fecha_fin)})`
       : rango?.desde || rango?.hasta
       ? `${rango?.desde ? fechaCorta(rango.desde) : 'Inicio'} – ${rango?.hasta ? fechaCorta(rango.hasta) : 'hoy'}`
       : 'Todo el ciclo';

@@ -119,6 +119,17 @@ The general fee and period are set in Configuración → Reglas y Parámetros; t
 - Table `cortes_bimestrales` (`nombre`, `fecha_inicio`, `fecha_fin`; ADMIN writes) is managed in Configuración → Cortes (`CortesBimestralesTab.tsx`): cuts cannot overlap, and "Crear 6 bimestres" creates Ene–Feb … Nov–Dic of a year (`proponerBimestresDelAnio` / `crearBimestresDelAnio`), skipping overlaps. **The cuts are also the class calendar of every workshop**: `crearCorte`, `actualizarCorte`, `eliminarCorte` and `crearBimestresDelAnio` (once, at the end) run `reaplicarCalendarioATodos()` and return its totals; the private `insertarCorte` inserts without recalculating. Deleting a cut removes its sessions except closed, attended or extraordinary ones.
 - Table `movimientos_inscripcion` is an insert-only log (`insertOnly`; INSERT for ADMIN, CAJERO and MATRICULA; no UPDATE or DELETE; no FKs, with denormalized names) of `ALTA_TALLER`, `BAJA_TALLER`, `BAJA_ALUMNO` and `REACTIVACION_ALUMNO`. The private `registrarMovimiento()` writes it from `inscribirEstudianteEnGrupo`, `agregarEstudiante` (with a group), `desinscribirEstudianteDeGrupo`, `eliminarGrupo` (reason "Taller eliminado"), `darDeBajaEstudiante`, `reactivarEstudiante` and the enrollment acceptance that reactivates a student. It is skipped for other roles (RLS would reject it). `registrado_por` comes from `storageService.setPerfilActual()`, set by `auth.service`. The migration backfilled one ALTA per existing enrollment and one BAJA per student already on BAJA; unenrollments before 2026-11-18 are lost, because `inscripciones` rows are deleted.
 - `calcularCorteBimestral(corteId, gruposPermitidos?)` (cached under `cortes`, `movimientos`, `inscripciones`, `estudiantes`, `matriculas`, ...) builds intervals per student and workshop from the log (fallback `fecha_inscripcion`; a BAJA closes it, exclusive) minus student-level BAJA → REACTIVACION gaps. The months are the calendar months the cut touches. A month is **billable** if the student was active at least one day in it (whole monthly fee). A paid enrollment (`solvente`, local month of `fechaPagoLocal()` in `src/utils/fechas.ts`, shared with Recibos) covers the first active month from its payment month onward, which is marked `MATRICULA` and not billed. The monthly fee is the group's `costo` or `configuracion.arancel_taller` (`mensualidadDe`, same rule as `arancelDeGrupo`, which is not imported to avoid a circular import). Attendance uses `calcularAlertasEstudiantes(undefined, { desde, hasta })`.
+
+**Per-cut counters (absences and indiscipline reset at every cut).**
+
+- **Current cut:** `storageService.corteVigente(fecha = hoy)` returns the cut that contains the date. When the date falls between cuts (vacations), it returns the last cut that has already started. It returns `null` when there are no cuts or the date is before the first one. `rangoCorteVigente()` gives that cut's `{ desde, hasta }`.
+- **`calcularAlertasEstudiantes(grupoId?, rango?)`:**
+  - With **no `rango`**, it uses the current cut. When there is none, it uses the whole cycle, so attendance taken before the first cut is not hidden.
+  - Pass `{}` explicitly for the whole cycle, or `{ desde?, hasta? }` for any range.
+  - Every caller with no range follows the current cut: Panel alerts, Toma de Asistencia "En Riesgo" and its badges, Estudiantes "Con Alertas", the exports and the printable data.
+  - The cache key always includes the resolved range, and the cache is tagged `alertas`, `asistencias`, `anecdotario` and `cortes`.
+- **`AlertaEstudiante.total_indisciplina`** counts the visible `INDISCIPLINA` notes for that student and workshop whose local `creado_en` date falls in the range. A PROFESOR only downloads their own notes, so they only see their own. The count is informational: there is no indiscipline threshold, and the alert levels use only absences (`limite_ausencias_alerta`, `porcentaje_inasistencia_alerta`, and the fixed 2 absences / 15 % warning).
+- **Exports:** `exportGroupToExcel(grupoId, periodo?)` and `exportConsolidatedExcel(grupoId, permitidos, periodo?)` take a `PeriodoInforme` `{ desde?, hasta?, etiqueta? }`; without it they use the current cut (`resolverPeriodo`). They filter the sessions to that range, add an Indisciplina column, and write the period in the Resumen sheet.
 - Reportes → **Corte bimestral** (`CorteBimestralTab.tsx`, ADMIN and CAJERO) has a cut selector (default: the cut containing today), KPIs, an expandable per-workshop table with per-student month chips (✓ / M / —), Altas y bajas and Matrículas cobradas, and `exportService.exportCorteBimestral()` (sheets Resumen, Cobro por Taller, Detalle por Alumno, Altas y Bajas, Matrículas).
 
 **Solvency gate (only students paid in Caja join workshops)**: `storageService.estadoSolvencia(est)` returns `{ solvente, motivo }`.
@@ -156,21 +167,30 @@ How it is enforced:
     - Sesiones Concluidas: closed sessions out of those sessions.
     - Talleres & Comunidad: workshops with classes in the period, plus their distinct active enrolled students and tutors.
   - With no filters, Talleres & Comunidad keeps the global totals.
-  - **Alertas de Inasistencia** respond only to the workshop filter, because alerts are cumulative over the cycle (`calcularAlertasEstudiantes(grupoId)`).
+  - **Alertas de Inasistencia** respond only to the workshop filter. They count the **current cut** (`calcularAlertasEstudiantes(grupoId)` with no range), and the footer names that cut.
   - **Monitoreo de Ausentismo** (`AbsenteeismMonitorCard`, right column below Próximas clases) lists students with `tiene_alerta`, sorted by absences.
-    - It has its own filters, independent of the KPI filters and remembered under `cca_panel_ausentismo_filtros`: a date period (Semana / Mes / Ciclo, the default / Rango) and a workshop (all, or one).
-    - It calls `calcularAlertasEstudiantes(grupoId | undefined, { desde, hasta })`. With a range, only closed sessions in those dates count, and the Configuración thresholds apply to that period.
-    - Without a range, the method behaves exactly as before, so every other caller is unchanged.
-    - The range is part of the cache key under the `alertas` tag.
+    - It has its own filters, independent of the KPI filters and remembered under `cca_panel_ausentismo_filtros`: a period and a workshop (all, or one).
+    - The periods are Semana / Mes / **Bimestre** (the default: the current cut, or the whole cycle if none has started) / Ciclo (`{}`) / Rango. A saved `'ciclo'` from before the per-cut reset is read as `'bimestre'`.
+    - It calls `calcularAlertasEstudiantes(grupoId | undefined, rango)`. Only closed sessions in those dates count, and the Configuración thresholds apply to that period.
   - Shared pieces live in `attendanceStatus.shared.tsx`. Those are `ESTADOS`, `FilaEstatus`, `FilaSesion`, `BadgeExtra`, and the UTC date helpers on `YYYY-MM-DD` strings (`sumarDias`, `lunesDe`, `inicioDeMes`, `finDeMes`, `sumarMeses`). Use them instead of `new Date('YYYY-MM-DD')`.
 - **Talleres** (`WorkshopsView`) toggles between **Tarjetas** (the default grid) and **Lista** (a table from `md` up, compact rows on phones). The choice is remembered in `localStorage` under `cca_talleres_vista`. Both views share `datosTaller()`, `renderAcciones(grupo, compacto)` (Editar / Eliminar / Alumnos for ADMIN, plus Asistencia; icon-only in the list) and `BarraAvance`, so a new action or field goes in one place. A search bar (not persisted) filters both views after the role filter, case- and accent-insensitive, requiring every typed word to match the workshop name, teacher, room, hours or weekdays (short "Mié" or full "miércoles"); it shows "N de M talleres" and its own empty state with "Limpiar búsqueda".
 - **Reportes** has four tabs (Corte bimestral is described under Cortes bimestrales):
-  - **Matriz de Asistencia**: ADMIN and PROFESOR. One row per student and workshop, taken from `calcularAlertasEstudiantes`.
-    - The "Fechas de inasistencia" column lists the dates of each absence (red "A" chip) and justification (amber "J" chip, with the reason in the tooltip). Dates are built in `incidenciasPorFila`, keyed by `estudiante_id|grupo_id`.
-    - Only **closed** sessions count, the same rule as the alert totals, so the number of "A" chips matches "Faltas Registradas". Extraordinary sessions are tagged "Extra".
-    - The column shows up to 4 chips plus "+N más". Clicking the row expands a detail with every date in long form and the justification reason.
-    - "Faltas Registradas" also shows "N justif.".
-    - The printable document adds a plain "Fechas (A / J)" column, for example "A: 12/11, 19/11 · J: 26/11".
+  - **Matriz de Asistencia** (`MatrizAsistenciaTab.tsx`; `ReportsView` only holds the header and tabs): ADMIN and PROFESOR, organized **by two-month cut** (see "Per-cut counters").
+    - Filters:
+      - **Período**: one option per cut, with "(actual)" on `corteVigente()`, which is the default; "Todo el ciclo"; "Rango personalizado…" with Desde/Hasta and a warning when Hasta < Desde. The default is "Todo el ciclo" when no cut has started.
+      - **Taller**.
+      - The order selector, with "Más faltas".
+      - **Vista**: Detalle | Por bimestres.
+      - The Imprimible and Excel buttons live in this bar.
+    - **Detalle**:
+      - One row per student and workshop from `calcularAlertasEstudiantes(undefined, rango)`. Only rows with closed sessions or indiscipline notes in the period are shown.
+      - 5 KPIs for the period: attendance rate, critical, warnings, regular, and with indiscipline.
+      - Columns: Faltas (with "N justif."), % Inasistencia, **Indisciplina** (violet chip; the tooltip shows the dates of the notes), and Fechas de inasistencia.
+      - The "Fechas de inasistencia" column shows red "A" and amber "J" chips (the reason is in the tooltip), up to 4 plus "+N más". Clicking the row expands every date. `incidenciasPorFila` only takes closed sessions in the range, so the count of "A" chips matches Faltas. Extra sessions are tagged "Extra".
+    - **Por bimestres**:
+      - One row per student and workshop, and one column per cut. The columns are the selected period's year, or every cut with "Todo el ciclo"; the current cut is highlighted.
+      - Each cell shows faltas/sesiones, "+NJ", the indiscipline count, and a color for the level. "—" means no closed sessions and no notes.
+    - The print view prints the active view with the period's name. Excel calls `exportConsolidatedExcel(grupo, permitidos, { desde, hasta, etiqueta })`.
     - Dates are parsed from `YYYY-MM-DD` as local dates.
   - **Historial de Recibos y Pagos Contables** (`ReceiptsHistoryTab`): ADMIN and CAJERO. CAJERO sees only this tab and Corte bimestral.
     - It filters by payment date: Todo (default), Hoy, Esta semana, Este mes, or Rango (Desde/Hasta, both optional).

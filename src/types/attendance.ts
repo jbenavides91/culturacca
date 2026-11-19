@@ -304,6 +304,8 @@ export interface AlertaEstudiante {
   total_ausencias: number;
   total_justificadas: number;
   porcentaje_inasistencia: number;
+  /** Anotaciones INDISCIPLINA del alumno en el taller dentro del período (solo informativo, sin alerta) */
+  total_indisciplina: number;
   tiene_alerta: boolean;
   nivel_alerta: 'NORMAL' | 'ADVERTENCIA' | 'CRITICA';
 }

@@ -130,7 +130,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
     const sesionesTotales = sesionesBase.length;
     const progreso = sesionesTotales > 0 ? Math.round((sesionesCerradas / sesionesTotales) * 100) : 0;
 
-    // 3. Alertas (acumuladas del ciclo; solo responden al taller)
+    // 3. Alertas del bimestre vigente (se reinician en cada corte; solo responden al taller)
     const alertas = storageService
       .calcularAlertasEstudiantes(grupoSel === 'TODOS' ? undefined : grupoSel)
       .filter((a) => a.tiene_alerta);
@@ -333,7 +333,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
           </p>
         </div>
 
-        {/* 3. Alertas (acumuladas del ciclo) */}
+        {/* 3. Alertas del bimestre vigente */}
         <div className={tarjeta}>
           <div className={etiqueta}>
             <span>Alertas de Inasistencia</span>
@@ -351,8 +351,8 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
               style={{ width: `${Math.min(stats.alertas * 25, 100)}%` }}
             />
           </div>
-          <p className={pie} title="Las alertas se calculan sobre todo el ciclo con el umbral de Configuración; solo les afecta el filtro de taller.">
-            Acumulado del ciclo · umbral de Configuración
+          <p className={pie} title="Las faltas se reinician en cada corte bimestral: las alertas cuentan el bimestre vigente con el umbral de Configuración; solo les afecta el filtro de taller.">
+            {storageService.corteVigente()?.nombre ?? 'Todo el ciclo'} · umbral de Configuración
           </p>
         </div>
 

@@ -561,6 +561,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           <button
             type="button"
             onClick={() => setFilterTab('ALERTAS')}
+            title="Alumnos con alerta de inasistencia en el bimestre vigente (los contadores se reinician en cada corte)"
             className={`px-3 py-1 rounded-lg transition-all cursor-pointer shrink-0 ${
               filterTab === 'ALERTAS'
                 ? 'bg-white dark:bg-[#141A23] text-purple-600 dark:text-purple-400 shadow-2xs font-semibold'

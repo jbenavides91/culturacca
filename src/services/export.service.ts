@@ -29,6 +29,30 @@ const hojaTabla = (encabezado: string[], filas: (string | number)[][], anchos: n
   return ws;
 };
 
+/** Período de un informe de asistencia: rango de fechas (YYYY-MM-DD) y su nombre para el encabezado */
+export interface PeriodoInforme {
+  desde?: string;
+  hasta?: string;
+  etiqueta?: string;
+}
+
+/** Sin período explícito se usa el corte vigente (los contadores se reinician en cada corte) */
+const resolverPeriodo = (periodo?: PeriodoInforme) => {
+  if (periodo) {
+    return {
+      rango: { desde: periodo.desde, hasta: periodo.hasta },
+      etiqueta: periodo.etiqueta || `${periodo.desde || 'Inicio'} a ${periodo.hasta || 'hoy'}`,
+    };
+  }
+  const corte = storageService.corteVigente();
+  return corte
+    ? { rango: { desde: corte.fecha_inicio, hasta: corte.fecha_fin }, etiqueta: `${corte.nombre} (${corte.fecha_inicio} a ${corte.fecha_fin})` }
+    : { rango: {}, etiqueta: 'Todo el ciclo' };
+};
+
+const enRango = (fecha: string, rango: { desde?: string; hasta?: string }) =>
+  (!rango.desde || fecha >= rango.desde) && (!rango.hasta || fecha <= rango.hasta);
+
 const gradoDe = (est?: Estudiante) => est?.grado || 'Sin grado';
 const aulaDe = (est?: Estudiante) => est?.aula_regular || 'Sin aula';
 
@@ -36,16 +60,17 @@ export class ExportService {
   /**
    * Genera y descarga un libro de Excel (.xlsx) estructurado
    */
-  exportGroupToExcel(grupoId: string): void {
+  exportGroupToExcel(grupoId: string, periodo?: PeriodoInforme): void {
     const grupo = storageService.getGrupoById(grupoId);
     if (!grupo) return;
+    const { rango, etiqueta } = resolverPeriodo(periodo);
 
     // Por apellido y nombre, igual que en pantalla
     const estudiantes = ordenarAlfabetico(storageService.getEstudiantesByGrupo(grupoId), (e) => [e.apellido, e.nombre]);
     const estudiantePorId = new Map(storageService.getEstudiantes().map((e) => [e.id, e]));
-    const sesiones = storageService.getSesionesByGrupo(grupoId);
+    const sesiones = storageService.getSesionesByGrupo(grupoId).filter((s) => enRango(s.fecha, rango));
     const asistencias = storageService.getAsistencias();
-    const alertas = storageService.calcularAlertasEstudiantes(grupoId);
+    const alertas = storageService.calcularAlertasEstudiantes(grupoId, rango);
     const config = storageService.getConfiguracion();
 
     // 1. Hoja: Resumen General
@@ -57,6 +82,7 @@ export class ExportService {
       ['Salón del taller:', grupo.aula || 'Taller Principal'],
       ['Horario:', `${grupo.hora_inicio} - ${grupo.hora_fin}`],
       ['Ciclo Académico:', config.ciclo_academico_actual],
+      ['Período:', etiqueta],
       ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
       ['Total Alumnos Inscritos:', estudiantes.length],
       ['Total Sesiones Programadas:', sesiones.length],
@@ -70,7 +96,7 @@ export class ExportService {
 
     // 2. Hoja: Matriz de Asistencia
     const fechas = sesiones.map((s) => `${s.fecha} (${s.cerrada ? 'Cerrada' : 'Pendiente'})`);
-    const headerRow = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor', 'Teléfono Tutor', ...fechas, 'Total Asistencias', 'Total Faltas', 'Total Justificadas', '% Inasistencia', 'Estatus Alerta'];
+    const headerRow = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor', 'Teléfono Tutor', ...fechas, 'Total Asistencias', 'Total Faltas', 'Total Justificadas', '% Inasistencia', 'Indisciplina', 'Estatus Alerta'];
 
     const matrixRows = estudiantes.map((est) => {
       const tutor = storageService.getTutorById(est.tutor_id);
@@ -111,18 +137,18 @@ export class ExportService {
       const pct = totalCerradas > 0 ? Math.round((ausentes / totalCerradas) * 1000) / 10 : 0;
       const alerta = alertas.find((a) => a.estudiante_id === est.id);
 
-      row.push(presentes, ausentes, justificadas, `${pct}%`, alerta?.nivel_alerta || 'NORMAL');
+      row.push(presentes, ausentes, justificadas, `${pct}%`, alerta?.total_indisciplina ?? 0, alerta?.nivel_alerta || 'NORMAL');
       return row;
     });
 
     const wsMatrix = hojaTabla(headerRow, matrixRows, [
       14, 28, 12, 12, 24, 14,
       ...fechas.map(() => 20),
-      16, 12, 16, 14, 14,
+      16, 12, 16, 14, 12, 14,
     ]);
 
     // 3. Hoja: Alertas y Casos Críticos
-    const headerAlerts = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor Responsable', 'Correo Tutor', 'Faltas Acumuladas', '% Inasistencia', 'Nivel de Alerta', 'Acción Requerida'];
+    const headerAlerts = ['Matrícula', 'Estudiante', 'Grado', 'Aula', 'Tutor Responsable', 'Correo Tutor', 'Faltas del período', '% Inasistencia', 'Indisciplina', 'Nivel de Alerta', 'Acción Requerida'];
     const alertRows = alertas.map((a) => [
       a.matricula,
       a.estudiante_nombre,
@@ -132,6 +158,7 @@ export class ExportService {
       a.tutor_email,
       a.total_ausencias,
       `${a.porcentaje_inasistencia}%`,
+      a.total_indisciplina,
       a.nivel_alerta,
       a.nivel_alerta === 'CRITICA'
         ? 'Citatorio formal a tutor y riesgo de acreditación'
@@ -139,7 +166,7 @@ export class ExportService {
         ? 'Aviso preventivo enviado a tutor'
         : 'Regular',
     ]);
-    const wsAlerts = hojaTabla(headerAlerts, alertRows, [14, 28, 12, 12, 26, 28, 16, 14, 14, 44]);
+    const wsAlerts = hojaTabla(headerAlerts, alertRows, [14, 28, 12, 12, 26, 28, 16, 14, 12, 14, 44]);
 
     // Crear libro y agregar hojas
     const wb = XLSX.utils.book_new();
@@ -158,11 +185,12 @@ export class ExportService {
    * Con un taller concreto delega en exportGroupToExcel.
    * `gruposPermitidos` limita los talleres a los visibles para el rol (p. ej. un docente).
    */
-  exportConsolidatedExcel(grupoId?: string, gruposPermitidos?: string[]): void {
+  exportConsolidatedExcel(grupoId?: string, gruposPermitidos?: string[], periodo?: PeriodoInforme): void {
     if (grupoId && grupoId !== 'TODOS') {
-      this.exportGroupToExcel(grupoId);
+      this.exportGroupToExcel(grupoId, periodo);
       return;
     }
+    const { rango, etiqueta } = resolverPeriodo(periodo);
 
     const permitidos = gruposPermitidos ? new Set(gruposPermitidos) : null;
     const grupos = storageService
@@ -171,8 +199,8 @@ export class ExportService {
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     const idsGrupos = new Set(grupos.map((g) => g.id));
     const config = storageService.getConfiguracion();
-    const alertas = storageService.calcularAlertasEstudiantes().filter((a) => idsGrupos.has(a.grupo_id));
-    const sesiones = storageService.getSesiones().filter((s) => idsGrupos.has(s.grupo_id));
+    const alertas = storageService.calcularAlertasEstudiantes(undefined, rango).filter((a) => idsGrupos.has(a.grupo_id));
+    const sesiones = storageService.getSesiones().filter((s) => idsGrupos.has(s.grupo_id) && enRango(s.fecha, rango));
     const perfiles = new Map(storageService.getPerfiles().map((p) => [p.id, `${p.nombre} ${p.apellido}`.trim()]));
     const tutores = new Map(storageService.getTutores().map((t) => [t.id, t]));
 
@@ -263,6 +291,7 @@ export class ExportService {
             `${pct}%`,
             fechasA.join(', ') || '—',
             fechasJ.join(', ') || '—',
+            alerta?.total_indisciplina ?? 0,
             alerta?.nivel_alerta || 'NORMAL',
             accion(alerta?.nivel_alerta || 'NORMAL'),
           ]);
@@ -300,6 +329,7 @@ export class ExportService {
       ['INFORME EJECUTIVO CONSOLIDADO DE ASISTENCIA'],
       [''],
       ['Ciclo Académico:', config.ciclo_academico_actual],
+      ['Período:', etiqueta],
       ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
       ['Talleres incluidos:', grupos.length],
       ['Alumnos inscritos (distintos):', alumnosUnicos.size],
@@ -311,6 +341,7 @@ export class ExportService {
       ['PARÁMETROS DE EVALUACIÓN'],
       ['Límite de faltas permitidas:', `${config.limite_ausencias_alerta} faltas`],
       ['Porcentaje máximo de inasistencia:', `${config.porcentaje_inasistencia_alerta}%`],
+      ['Reinicio de contadores:', 'Las faltas y la indisciplina se cuentan por corte bimestral.'],
       [''],
       ['CONTENIDO DEL LIBRO'],
       ['Resumen por Taller:', 'Una fila por taller con sus totales.'],
@@ -339,11 +370,11 @@ export class ExportService {
       hojaTabla(
         [
           'Taller', 'Matrícula', 'Estudiante', 'Estado', 'Tutor', 'Teléfono Tutor', 'Sesiones cerradas', 'Presentes',
-          'Faltas', 'Justificadas', '% Inasistencia', 'Fechas de ausencia', 'Fechas justificadas', 'Nivel de alerta',
-          'Acción requerida',
+          'Faltas', 'Justificadas', '% Inasistencia', 'Fechas de ausencia', 'Fechas justificadas', 'Indisciplina',
+          'Nivel de alerta', 'Acción requerida',
         ],
         filasMatriz,
-        [26, 14, 28, 9, 24, 15, 10, 10, 8, 11, 12, 30, 30, 14, 40]
+        [26, 14, 28, 9, 24, 15, 10, 10, 8, 11, 12, 30, 30, 11, 14, 40]
       ),
       'Matriz Consolidada'
     );
@@ -357,7 +388,8 @@ export class ExportService {
       'Detalle por Sesión'
     );
 
-    XLSX.writeFile(wb, `Informe_Consolidado_Talleres_${fechaLocalISO()}.xlsx`);
+    const sufijo = etiqueta.split(' (')[0].replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
+    XLSX.writeFile(wb, `Informe_Consolidado_Talleres_${sufijo ? `${sufijo}_` : ''}${fechaLocalISO()}.xlsx`);
   }
 
   /**
