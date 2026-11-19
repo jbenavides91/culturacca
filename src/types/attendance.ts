@@ -471,3 +471,48 @@ export interface SolicitudMatricula {
   /** Error del último intento de envío; null si el último fue correcto */
   correo_error?: string | null;
 }
+
+/** Hecho del historial de permanencia de un alumno (Reportes → Permanencia) */
+export type TipoEventoPermanencia =
+  | 'MATRICULA'
+  | 'REMATRICULA'
+  | 'RENOVACION'
+  | 'BAJA'
+  | 'REACTIVACION'
+  | 'ALTA_TALLER'
+  | 'BAJA_TALLER';
+
+export interface EventoPermanencia {
+  fecha: string; // YYYY-MM-DD (fecha local)
+  tipo: TipoEventoPermanencia;
+  detalle: string;
+}
+
+/** PERMANENTE: activo y nunca de baja · REINCORPORADO: tuvo baja y hoy está activo · DE_BAJA: hoy en baja */
+export type EstadoPermanencia = 'PERMANENTE' | 'REINCORPORADO' | 'DE_BAJA';
+
+export interface PermanenciaAlumno {
+  estudiante_id: string;
+  nombre: string;
+  apellido: string;
+  matricula: string;
+  grado: string;
+  talleres: string[];
+  grupo_ids: string[];
+  /** Fecha más antigua registrada de su ingreso (solicitud, alta en taller, inscripción o alta del alumno) */
+  primera_matricula: string;
+  estado: EstadoPermanencia;
+  /** Fecha de la baja vigente (solo DE_BAJA) */
+  baja_desde?: string;
+  /** Días activo desde la primera matrícula hasta hoy (o hasta la baja vigente), sin los periodos de baja */
+  dias_activo: number;
+  /** Texto legible: "1 año 2 meses", "8 meses", "12 días" */
+  permanencia: string;
+  /** Años calendario con al menos un día activo */
+  anios_activos: number[];
+  bajas: number;
+  reingresos: number;
+  ultima_baja?: string;
+  ultimo_reingreso?: string;
+  eventos: EventoPermanencia[];
+}

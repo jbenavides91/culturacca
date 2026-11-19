@@ -1,5 +1,14 @@
 import * as XLSX from 'xlsx';
-import { AlertaEstudiante, Asistencia, Estudiante, Grupo, ResultadoCorte, Sesion } from '../types/attendance';
+import {
+  AlertaEstudiante,
+  Asistencia,
+  Estudiante,
+  EventoPermanencia,
+  Grupo,
+  PermanenciaAlumno,
+  ResultadoCorte,
+  Sesion,
+} from '../types/attendance';
 import { storageService } from './storage.service';
 import { cicloActual, nombreInstitucion } from '../utils/institucion';
 import { fechaLocalISO } from '../utils/fechas';
@@ -413,6 +422,64 @@ export class ExportService {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Anecdotario');
     XLSX.writeFile(wb, `Anecdotario_${fechaLocalISO()}.xlsx`);
+  }
+
+  /**
+   * Permanencia de alumnos: hoja "Permanencia" (una fila por alumno) y hoja "Historial"
+   * (una fila por hecho: matrícula, baja, reactivación, renovación, altas y salidas de talleres).
+   */
+  exportPermanencia(filas: PermanenciaAlumno[], filtrosDescripcion: string): void {
+    const ESTADOS: Record<PermanenciaAlumno['estado'], string> = {
+      PERMANENTE: 'Permanente',
+      REINCORPORADO: 'Reincorporado',
+      DE_BAJA: 'De baja',
+    };
+    const EVENTOS: Record<EventoPermanencia['tipo'], string> = {
+      MATRICULA: 'Matrícula',
+      REMATRICULA: 'Nueva matrícula',
+      RENOVACION: 'Renovación',
+      BAJA: 'Baja',
+      REACTIVACION: 'Reactivación',
+      ALTA_TALLER: 'Alta en taller',
+      BAJA_TALLER: 'Sale de taller',
+    };
+    const ordenadas = ordenarAlfabetico(filas, (f) => [f.apellido, f.nombre]);
+
+    const encabezado = [
+      [nombreInstitucion().toUpperCase()],
+      ['PERMANENCIA DE ALUMNOS EN LOS TALLERES'],
+      ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES')],
+      ['Filtros aplicados:', filtrosDescripcion],
+      ['Total de alumnos:', filas.length],
+      [''],
+    ];
+    const columnas = [
+      'Apellidos', 'Nombres', 'Código', 'Grado', 'Talleres actuales', 'Primera matrícula',
+      'Permanencia', 'Días activo', 'Años activos', 'Estado', 'Bajas', 'Reingresos', 'Última baja', 'Último reingreso',
+    ];
+    const datos = ordenadas.map((f) => [
+      f.apellido, f.nombre, f.matricula, f.grado || 'Sin grado', f.talleres.join(', ') || '—', f.primera_matricula,
+      f.permanencia, f.dias_activo, f.anios_activos.join(', '), ESTADOS[f.estado], f.bajas, f.reingresos,
+      f.ultima_baja ?? '', f.ultimo_reingreso ?? '',
+    ]);
+    const wsResumen = XLSX.utils.aoa_to_sheet([...encabezado, columnas, ...datos]);
+    wsResumen['!cols'] = [22, 22, 14, 12, 30, 16, 16, 11, 14, 14, 8, 11, 14, 16].map((wch) => ({ wch }));
+    wsResumen['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: encabezado.length, c: 0 },
+        e: { r: encabezado.length + Math.max(datos.length, 1), c: columnas.length - 1 },
+      }),
+    };
+
+    const historial = ordenadas.flatMap((f) =>
+      f.eventos.map((e) => [`${f.apellido}, ${f.nombre}`, f.matricula, e.fecha, EVENTOS[e.tipo], e.detalle])
+    );
+    const wsHistorial = hojaTabla(['Alumno', 'Código', 'Fecha', 'Evento', 'Detalle'], historial, [28, 14, 12, 16, 60]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Permanencia');
+    XLSX.utils.book_append_sheet(wb, wsHistorial, 'Historial');
+    XLSX.writeFile(wb, `Permanencia_Alumnos_${fechaLocalISO()}.xlsx`);
   }
 
   /**

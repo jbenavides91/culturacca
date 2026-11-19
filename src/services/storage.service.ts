@@ -17,6 +17,9 @@ import {
   FilaCorteTaller,
   MatriculaCorte,
   MovimientoInscripcion,
+  EventoPermanencia,
+  PermanenciaAlumno,
+  TipoEventoPermanencia,
   ResultadoCorte,
   TipoMovimiento,
   EstadoEstudiante,
@@ -2600,6 +2603,171 @@ class StorageService {
     if (propio > 0) return propio;
     const general = Number(this.getConfiguracion().arancel_taller);
     return general > 0 ? general : 1200;
+  }
+
+  /**
+   * Permanencia de cada alumno (Reportes → Permanencia): primera matrícula, bajas, reingresos y
+   * tiempo activo, solo con lo que el sistema registra (solicitudes, bitácora de movimientos,
+   * inscripciones y alta del alumno). Con `gruposPermitidos` (docente) solo entran los alumnos de
+   * esos talleres y no se nombran los demás talleres.
+   */
+  historialPermanencia(gruposPermitidos?: string[]): PermanenciaAlumno[] {
+    const claveCache = `permanencia_${gruposPermitidos ? gruposPermitidos.slice().sort().join(',') : 'todos'}`;
+    const cached = cacheService.get<PermanenciaAlumno[]>(claveCache);
+    if (cached) return cached;
+
+    const permitidos = gruposPermitidos ? new Set(gruposPermitidos) : null;
+    const visible = (grupoId?: string | null) => !permitidos || (!!grupoId && permitidos.has(grupoId));
+    const hoy = fechaLocalISO();
+    const aFecha = (v?: string | null): string | null => {
+      if (!v) return null;
+      const s = String(v);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? s.slice(0, 10) : fechaLocalISO(d);
+    };
+    // Aritmética de días en UTC sobre YYYY-MM-DD (sin desfases de zona horaria)
+    const dia = (f: string) => {
+      const [y, m, d] = f.split('-').map(Number);
+      return Date.UTC(y, m - 1, d) / 86400000;
+    };
+    const desdeDia = (n: number) => new Date(n * 86400000).toISOString().slice(0, 10);
+
+    const grupos = new Map(this.getGrupos().map((g) => [g.id, g]));
+    const inscripciones = this.getInscripciones();
+    const movimientos = this.getMovimientos();
+    const solicitudes = this.read<SolicitudMatricula[]>(STORAGE_KEYS.MATRICULAS, []).filter((s) => s.estado !== 'RECHAZADA');
+    const estudiantes = this.read<Estudiante[]>(STORAGE_KEYS.ESTUDIANTES, []);
+
+    const textoPermanencia = (dias: number): string => {
+      if (dias <= 0) return 'Sin tiempo activo';
+      const anios = Math.floor(dias / 365);
+      const meses = Math.floor((dias % 365) / 30);
+      const partes: string[] = [];
+      if (anios > 0) partes.push(`${anios} ${anios === 1 ? 'año' : 'años'}`);
+      if (meses > 0) partes.push(`${meses} ${meses === 1 ? 'mes' : 'meses'}`);
+      if (partes.length === 0) partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`);
+      return partes.join(' ');
+    };
+
+    const resultado: PermanenciaAlumno[] = [];
+    for (const est of estudiantes) {
+      const inscs = inscripciones.filter((i) => i.estudiante_id === est.id);
+      const movs = movimientos.filter((m) => m.estudiante_id === est.id);
+      if (permitidos && !inscs.some((i) => visible(i.grupo_id)) && !movs.some((m) => visible(m.grupo_id))) continue;
+
+      const codigo = est.matricula.trim().toUpperCase();
+      const sols = solicitudes
+        .filter(
+          (s) =>
+            s.estudiante_id === est.id ||
+            s.estudiante_id_creado === est.id ||
+            (!!codigo && String(s.codigo_alumno || '').trim().toUpperCase() === codigo)
+        )
+        .map((s) => ({ s, fecha: aFecha(s.fecha_solicitud) ?? hoy }))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+      // Primera matrícula: la fecha más antigua registrada de su ingreso
+      const candidatas = [
+        sols[0]?.fecha,
+        movs.find((m) => m.tipo === 'ALTA_TALLER')?.fecha,
+        ...inscs.map((i) => aFecha(i.fecha_inscripcion)),
+        aFecha(est.creado_en),
+      ].filter((f): f is string => !!f);
+      const primera = candidatas.length > 0 ? candidatas.reduce((a, b) => (a < b ? a : b)) : hoy;
+
+      // Periodos de baja del alumno (BAJA → REACTIVACIÓN); respaldo con fecha_baja si falta en la bitácora
+      const pausas: { desde: string; hasta: string | null; motivo?: string | null }[] = [];
+      for (const m of movs) {
+        const abierta = pausas.length > 0 && pausas[pausas.length - 1].hasta === null ? pausas[pausas.length - 1] : null;
+        if (m.tipo === 'BAJA_ALUMNO' && !abierta) pausas.push({ desde: m.fecha, hasta: null, motivo: m.motivo });
+        else if (m.tipo === 'REACTIVACION_ALUMNO' && abierta) abierta.hasta = m.fecha;
+      }
+      if (est.estado === 'BAJA' && !pausas.some((p) => p.hasta === null)) {
+        pausas.push({ desde: aFecha(est.fecha_baja) ?? hoy, hasta: null, motivo: est.motivo_baja });
+      }
+      const enPausa = (f: string) => pausas.some((p) => p.desde <= f && (p.hasta === null || f < p.hasta));
+
+      // Línea de tiempo
+      const eventos: EventoPermanencia[] = [];
+      const nombreTaller = (grupoId?: string | null, nombre?: string) =>
+        visible(grupoId) ? nombre || grupos.get(grupoId || '')?.nombre || 'taller eliminado' : 'otro taller';
+      sols.forEach(({ s, fecha }, idx) => {
+        const pendiente = s.estado === 'PENDIENTE_CAJA' ? ' (pendiente de pago)' : '';
+        if (s.tipo_tramite === 'RENOVACION_ANUAL') {
+          eventos.push({ fecha, tipo: 'RENOVACION', detalle: `Renovación${s.ciclo_academico ? ` ${s.ciclo_academico}` : ''}${pendiente}` });
+        } else if (idx > 0 && enPausa(fecha)) {
+          eventos.push({ fecha, tipo: 'REMATRICULA', detalle: `Se volvió a matricular en ${nombreTaller(s.grupo_id, s.grupo_nombre)}${pendiente}` });
+        } else {
+          eventos.push({ fecha, tipo: 'MATRICULA', detalle: `Matrícula en ${nombreTaller(s.grupo_id, s.grupo_nombre)}${pendiente}` });
+        }
+      });
+      if (sols.length === 0) eventos.push({ fecha: primera, tipo: 'MATRICULA', detalle: 'Ingreso registrado en el sistema' });
+      pausas.forEach((p) => {
+        eventos.push({ fecha: p.desde, tipo: 'BAJA', detalle: p.motivo ? `Baja: ${p.motivo}` : 'Baja' });
+        if (p.hasta) eventos.push({ fecha: p.hasta, tipo: 'REACTIVACION', detalle: 'Reactivado' });
+      });
+      movs.forEach((m) => {
+        if (m.tipo !== 'ALTA_TALLER' && m.tipo !== 'BAJA_TALLER') return;
+        if (!visible(m.grupo_id)) return;
+        const taller = nombreTaller(m.grupo_id, m.grupo_nombre);
+        eventos.push(
+          m.tipo === 'ALTA_TALLER'
+            ? { fecha: m.fecha, tipo: 'ALTA_TALLER', detalle: `Alta en ${taller}` }
+            : { fecha: m.fecha, tipo: 'BAJA_TALLER', detalle: `Sale de ${taller}${m.motivo ? `: ${m.motivo}` : ''}` }
+        );
+      });
+      const ordenTipo: Record<TipoEventoPermanencia, number> = {
+        MATRICULA: 0, REMATRICULA: 1, RENOVACION: 2, REACTIVACION: 3, ALTA_TALLER: 4, BAJA_TALLER: 5, BAJA: 6,
+      };
+      eventos.sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenTipo[a.tipo] - ordenTipo[b.tipo]);
+
+      // Tiempo activo: [primera, fin) menos los periodos de baja
+      const pausaVigente = est.estado === 'BAJA' ? pausas.find((p) => p.hasta === null) : undefined;
+      const finExcl = pausaVigente ? Math.max(dia(pausaVigente.desde), dia(primera)) : dia(hoy) + 1;
+      const tramos: [number, number][] = [];
+      let inicio = dia(primera);
+      for (const p of [...pausas].sort((a, b) => a.desde.localeCompare(b.desde))) {
+        const pd = dia(p.desde);
+        const ph = p.hasta ? dia(p.hasta) : Infinity;
+        if (pd > inicio) tramos.push([inicio, Math.min(pd, finExcl)]);
+        inicio = Math.max(inicio, ph);
+        if (inicio >= finExcl) break;
+      }
+      if (inicio < finExcl) tramos.push([inicio, finExcl]);
+      const validos = tramos.filter(([a, b]) => b > a);
+      const diasActivo = validos.reduce((suma, [a, b]) => suma + (b - a), 0);
+      const anios = new Set<number>();
+      validos.forEach(([a, b]) => {
+        for (let y = Number(desdeDia(a).slice(0, 4)); y <= Number(desdeDia(b - 1).slice(0, 4)); y++) anios.add(y);
+      });
+
+      const cerradas = pausas.filter((p) => p.hasta);
+      const talleresActuales = inscs.filter((i) => visible(i.grupo_id));
+      resultado.push({
+        estudiante_id: est.id,
+        nombre: est.nombre,
+        apellido: est.apellido,
+        matricula: est.matricula,
+        grado: est.grado || '',
+        talleres: talleresActuales.map((i) => grupos.get(i.grupo_id)?.nombre || 'Taller'),
+        grupo_ids: talleresActuales.map((i) => i.grupo_id),
+        primera_matricula: primera,
+        estado: est.estado === 'BAJA' ? 'DE_BAJA' : pausas.length > 0 ? 'REINCORPORADO' : 'PERMANENTE',
+        baja_desde: pausaVigente?.desde,
+        dias_activo: diasActivo,
+        permanencia: textoPermanencia(diasActivo),
+        anios_activos: [...anios].sort((a, b) => a - b),
+        bajas: pausas.length,
+        reingresos: cerradas.length,
+        ultima_baja: pausas.length > 0 ? pausas[pausas.length - 1].desde : undefined,
+        ultimo_reingreso: cerradas.length > 0 ? cerradas[cerradas.length - 1].hasta ?? undefined : undefined,
+        eventos,
+      });
+    }
+
+    cacheService.set(claveCache, resultado, 60000, ['estudiantes', 'matriculas', 'movimientos', 'inscripciones', 'grupos']);
+    return resultado;
   }
 
   /**

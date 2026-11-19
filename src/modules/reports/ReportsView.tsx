@@ -1,31 +1,33 @@
 import React, { useState } from 'react';
-import { CalendarCheck, CalendarRange, NotebookPen, Receipt } from 'lucide-react';
+import { CalendarCheck, CalendarRange, History, NotebookPen, Receipt } from 'lucide-react';
 import { Perfil } from '../../types/attendance';
 import { ReceiptsHistoryTab } from './ReceiptsHistoryTab';
 import { AnecdotarioHistoryTab } from './AnecdotarioHistoryTab';
 import { CorteBimestralTab } from './CorteBimestralTab';
 import { MatrizAsistenciaTab } from './MatrizAsistenciaTab';
+import { PermanenciaTab } from './PermanenciaTab';
 
 interface ReportsViewProps {
   currentProfile: Perfil;
 }
 
-type ReportTab = 'asistencia' | 'recibos' | 'corte' | 'anecdotario';
+type ReportTab = 'asistencia' | 'recibos' | 'corte' | 'anecdotario' | 'permanencia';
 
 const TABS: Record<ReportTab, { label: string; icon: React.ElementType }> = {
   asistencia: { label: 'Matriz de Asistencia', icon: CalendarCheck },
   recibos: { label: 'Historial de Recibos y Pagos Contables', icon: Receipt },
   corte: { label: 'Corte bimestral', icon: CalendarRange },
   anecdotario: { label: 'Anecdotario', icon: NotebookPen },
+  permanencia: { label: 'Permanencia', icon: History },
 };
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
   const availableTabs: ReportTab[] =
     currentProfile.rol === 'ADMIN'
-      ? ['asistencia', 'recibos', 'corte', 'anecdotario']
+      ? ['asistencia', 'recibos', 'corte', 'anecdotario', 'permanencia']
       : currentProfile.rol === 'CAJERO'
       ? ['recibos', 'corte']
-      : ['asistencia', 'anecdotario'];
+      : ['asistencia', 'anecdotario', 'permanencia'];
   const [activeTab, setActiveTab] = useState<ReportTab>(availableTabs[0]);
   const reportTab: ReportTab = availableTabs.includes(activeTab) ? activeTab : availableTabs[0];
 
@@ -42,10 +44,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
         </h1>
         <p className="text-[11px] sm:text-xs text-[#667085] dark:text-[#94A3B8] mt-1">
           {currentProfile.rol === 'PROFESOR'
-            ? 'Inasistencias e indisciplina por bimestre de tus talleres e historial de tus anotaciones del anecdotario.'
+            ? 'Inasistencias e indisciplina por bimestre de tus talleres, historial de tus anotaciones del anecdotario y permanencia de tus alumnos.'
             : currentProfile.rol === 'CAJERO'
             ? 'Historial de recibos contables y corte bimestral: cobro esperado, altas y bajas, y matrículas cobradas.'
-            : 'Inasistencias e indisciplina por bimestre, historial de recibos, corte bimestral, anecdotario y exportación de informes institucionales.'}
+            : 'Inasistencias e indisciplina por bimestre, historial de recibos, corte bimestral, anecdotario, permanencia de alumnos y exportación de informes institucionales.'}
         </p>
       </div>
 
@@ -76,6 +78,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentProfile }) => {
         <ReceiptsHistoryTab />
       ) : reportTab === 'anecdotario' ? (
         <AnecdotarioHistoryTab currentProfile={currentProfile} />
+      ) : reportTab === 'permanencia' ? (
+        <PermanenciaTab currentProfile={currentProfile} />
       ) : reportTab === 'corte' ? (
         <CorteBimestralTab currentProfile={currentProfile} />
       ) : (
