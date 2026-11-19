@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Filter, TrendingUp, Users, X } from 'lucide-react';
+import { AlertTriangle, Filter, TrendingUp, Users, X } from 'lucide-react';
 import { storageService } from '../../services/storage.service';
 import { Asistencia, Estudiante, Grupo, Perfil, Sesion, Tutor } from '../../types/attendance';
 import { fechaLocalISO } from '../../utils/fechas';
@@ -125,17 +125,15 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
     const tasaAsistencia = registros.length > 0 ? Math.round((presentes / registros.length) * 100) : 0;
     const tasaJustificada = registros.length > 0 ? Math.round((justificados / registros.length) * 100) : 0;
 
-    // 2. Sesiones
-    const sesionesCerradas = sesionesBase.filter((s) => s.cerrada).length;
+    // Sesiones del período (solo para avisar "Sin clases en el período")
     const sesionesTotales = sesionesBase.length;
-    const progreso = sesionesTotales > 0 ? Math.round((sesionesCerradas / sesionesTotales) * 100) : 0;
 
-    // 3. Alertas del bimestre vigente (se reinician en cada corte; solo responden al taller)
+    // 2. Alertas del bimestre vigente (se reinician en cada corte; solo responden al taller)
     const alertas = storageService
       .calcularAlertasEstudiantes(grupoSel === 'TODOS' ? undefined : grupoSel)
       .filter((a) => a.tiene_alerta);
 
-    // 4. Talleres y comunidad
+    // 3. Talleres y comunidad
     let talleres: number;
     let alumnos: number;
     let numTutores: number;
@@ -165,9 +163,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
       presentes,
       tasaAsistencia,
       tasaJustificada,
-      sesionesCerradas,
       sesionesTotales,
-      progreso,
       alertas: alertas.length,
       talleres,
       alumnos,
@@ -276,7 +272,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
       )}
 
       {/* Tarjetas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* 1. Asistencia */}
         <div className={tarjeta}>
           <div className={etiqueta}>
@@ -306,34 +302,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
           </p>
         </div>
 
-        {/* 2. Sesiones */}
-        <div className={tarjeta}>
-          <div className={etiqueta}>
-            <span>Sesiones Concluidas</span>
-            <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-          </div>
-          <div className="mt-3 flex items-baseline space-x-2">
-            <span className={valor}>
-              {stats.sesionesCerradas} / {stats.sesionesTotales}
-            </span>
-            {stats.sesionesTotales > 0 && (
-              <span className="text-xs text-[#667085] dark:text-[#94A3B8] font-medium">({stats.progreso}%)</span>
-            )}
-          </div>
-          <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-indigo-600 dark:bg-indigo-400 h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${stats.progreso}%` }}
-            />
-          </div>
-          <p className={pie}>
-            {sinClases
-              ? 'Sin clases en el período'
-              : `${stats.sesionesTotales - stats.sesionesCerradas} sesiones pendientes`}
-          </p>
-        </div>
-
-        {/* 3. Alertas del bimestre vigente */}
+        {/* 2. Alertas del bimestre vigente */}
         <div className={tarjeta}>
           <div className={etiqueta}>
             <span>Alertas de Inasistencia</span>
@@ -356,8 +325,8 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
           </p>
         </div>
 
-        {/* 4. Talleres y comunidad */}
-        <div className={tarjeta}>
+        {/* 3. Talleres y comunidad (a lo ancho en teléfono, para no quedar sola a media fila) */}
+        <div className={`${tarjeta} col-span-2 lg:col-span-1`}>
           <div className={etiqueta}>
             <span>Talleres & Comunidad</span>
             <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />

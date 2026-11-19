@@ -254,12 +254,11 @@ Callers:
   - **Mes** (`AttendanceMonthCalendar`) is a month calendar with per-day status counters. Clicking a day lists its sessions with `FilaSesion`.
   - Semana and Mes navigate with ◀ ▶ and ignore the period selector.
   - **Próximas clases** (`UpcomingClassesCard`) is a separate card, not part of the status panel. It sits in the Panel's right column above Monitoreo de Ausentismo and is always visible, independent of the status filters. It lists sessions that are not closed and have not started yet (later today or future dates) as a day-grouped agenda ("Hoy" / "Mañana" / date, start and end time, Extra badge, workshop, teacher, room). It has its own date filter: **Próximos 7 días** (default; the next 7 days, or at least the first day with classes, and "Ver más clases" extends it 7 days at a time), **Este mes** (today to month end), and **Rango** (Desde/Hasta, both optional, `min` = today, with "Limpiar fechas" and a warning when Hasta < Desde). Past or already-started classes are never listed, whatever the range.
-  - **Indicadores** (`DashboardKpis`) are the 4 KPI cards at the top of the Panel. They have their own filters, independent of the rest of the Panel and remembered in `localStorage` under `cca_panel_kpi_filtros`:
+  - **Indicadores** (`DashboardKpis`) are the 3 KPI cards at the top of the Panel (the former "Sesiones Concluidas" card was removed on request). They have their own filters, independent of the rest of the Panel and remembered in `localStorage` under `cca_panel_kpi_filtros`:
     - Período: Hoy / Esta semana / Este mes / Todo el ciclo (default) / Rango.
     - Taller: all workshops or one.
   - The cards are computed from the sessions in the range and the selected workshop:
     - Tasa de Asistencia: records of those sessions.
-    - Sesiones Concluidas: closed sessions out of those sessions.
     - Talleres & Comunidad: workshops with classes in the period, plus their distinct active enrolled students and tutors.
   - With no filters, Talleres & Comunidad keeps the global totals.
   - **Alertas de Inasistencia** respond only to the workshop filter. They count the **current cut** (`calcularAlertasEstudiantes(grupoId)` with no range), and the footer names that cut.
