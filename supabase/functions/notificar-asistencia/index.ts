@@ -98,17 +98,18 @@ const esCorreoDeRelleno = (email: string) => {
   return e === 'familiar@cca.edu.ni' || e.endsWith('@familiar.cca.edu.ni');
 };
 
-/** "lunes, 23 de noviembre de 2026" a partir de YYYY-MM-DD (sin desfase de zona horaria) */
-const fechaSesionLarga = (fecha: string) => {
-  const [y, m, d] = String(fecha).split('-').map(Number);
-  if (!y || !m || !d) return String(fecha);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-ES', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+/** "23/11/2026" a partir de YYYY-MM-DD, leyendo las partes del texto (sin desfase de zona horaria) */
+const fechaCorta = (fecha: string) => {
+  const [y, m, d] = String(fecha).split('-');
+  return y && m && d ? `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}` : String(fecha);
+};
+
+/** "2do Grado, sección B" (aula_regular guarda la sección); "2do Grado – Aula 5-A" si es otro texto */
+const gradoYSeccion = (grado: unknown, aula: unknown) => {
+  const g = String(grado ?? '').trim();
+  const a = String(aula ?? '').trim();
+  if (g && a) return /^[A-Za-z0-9]$/.test(a) ? `${g}, sección ${a.toUpperCase()}` : `${g} – ${a}`;
+  return g || a || 'No registrado';
 };
 
 // ---------- Correo ----------
@@ -116,70 +117,84 @@ const fechaSesionLarga = (fecha: string) => {
 interface DatosAviso {
   institucion: string;
   tipo: 'INICIAL' | 'RECTIFICACION';
-  tutor: string;
   alumno: string;
+  gradoSeccion: string;
   taller: string;
+  /** dd/mm/aaaa */
   fecha: string;
   nuevoEstatus?: string;
   motivo?: string;
 }
 
+/**
+ * Texto acordado con la coordinación (2026-11-19). El aviso de ausencia reproduce el texto entregado;
+ * el de corrección sigue el mismo formato. Firma: "Coordinación de Cultura" + nombre de la institución.
+ */
 function construirAviso(d: DatosAviso): { asunto: string; html: string; texto: string } {
   const inicial = d.tipo === 'INICIAL';
-  const estado = d.nuevoEstatus === 'JUSTIFICADO' ? 'JUSTIFICADO' : 'PRESENTE';
-  const asunto = inicial
-    ? `Aviso de inasistencia – ${d.alumno} (${d.taller})`
-    : `Asistencia corregida (${estado}) – ${d.alumno} (${d.taller})`;
-  const texto = inicial
-    ? `${d.alumno} no asistió a la sesión de ${d.taller} del ${d.fecha}.`
-    : `La falta de ${d.alumno} en ${d.taller} del ${d.fecha} se corrigió a ${estado}.`;
+  const estado = d.nuevoEstatus === 'JUSTIFICADO' ? 'Justificado' : 'Presente';
+  const titulo = inicial ? 'AVISO DE AUSENCIAS' : 'AVISO DE CORRECCIÓN DE ASISTENCIA';
+  const intro = inicial
+    ? 'Le notificamos que el estudiante registró una ausencia en su taller artístico.'
+    : 'Le notificamos que la ausencia registrada del estudiante en su taller artístico fue corregida.';
+  const encabezadoDatos = inicial ? 'Datos de la ausencia:' : 'Datos de la corrección:';
+  const datos: [string, string][] = [
+    ['Estudiante', d.alumno],
+    ['Grado y sección', d.gradoSeccion],
+    ['Taller', d.taller],
+    [inicial ? 'Fecha de ausencia' : 'Fecha de la clase', d.fecha],
+  ];
+  if (!inicial) {
+    datos.push(['Nuevo estado', estado]);
+    if (d.motivo) datos.push(['Motivo', d.motivo]);
+  }
 
-  const bloque = inicial
-    ? `<div style="background:#fef2f2;border-left:4px solid #dc2626;padding:16px;margin:20px 0;border-radius:4px;">
-         <p style="margin:0;color:#991b1b;font-weight:600;font-size:14px;">Registro de inasistencia</p>
-         <p style="margin:8px 0 0;color:#7f1d1d;font-size:13px;line-height:1.5;">
-           Le informamos que <strong>${escaparHtml(d.alumno)}</strong> no asistió a la sesión del taller
-           <strong>${escaparHtml(d.taller)}</strong> del <strong>${escaparHtml(d.fecha)}</strong>.
-         </p>
-       </div>`
-    : `<div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px;margin:20px 0;border-radius:4px;">
-         <p style="margin:0;color:#166534;font-weight:600;font-size:14px;">Asistencia corregida: ${estado}</p>
-         <p style="margin:8px 0 0;color:#14532d;font-size:13px;line-height:1.5;">
-           La asistencia de <strong>${escaparHtml(d.alumno)}</strong> en la sesión de <strong>${escaparHtml(d.taller)}</strong>
-           del <strong>${escaparHtml(d.fecha)}</strong> se corrigió de <strong>AUSENTE</strong> a <strong>${estado}</strong>.
-         </p>
-         ${
-           d.motivo
-             ? `<p style="margin:8px 0 0;font-size:12px;color:#166534;background:#dcfce7;padding:6px 10px;border-radius:4px;"><strong>Motivo:</strong> ${escaparHtml(d.motivo)}</p>`
-             : ''
-         }
-       </div>`;
+  const asunto = inicial
+    ? `Aviso de ausencia – ${d.alumno} (${d.taller})`
+    : `Corrección de asistencia – ${d.alumno} (${d.taller})`;
+
+  const texto = [
+    titulo,
+    '',
+    'Estimado padre de familia:',
+    '',
+    intro,
+    '',
+    encabezadoDatos,
+    '',
+    ...datos.map(([k, v]) => `${k}: ${v}`),
+    '',
+    'Agradecemos su atención.',
+    '',
+    'Coordinación de Cultura',
+    d.institucion,
+  ].join('\n');
+
+  const filas = datos
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:8px 12px;color:#64748b;width:42%;">${escaparHtml(k)}:</td><td style="padding:8px 12px;font-weight:600;">${escaparHtml(v)}</td></tr>`
+    )
+    .join('\n        ');
 
   const html = `
   <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
     <div style="background:#1e293b;padding:24px;color:#ffffff;text-align:center;">
       <h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:0.5px;">${escaparHtml(d.institucion.toUpperCase())}</h1>
-      <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">Talleres de Arte y Cultura · Control de asistencia</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">Talleres de Arte y Cultura</p>
     </div>
     ${FRANJA_NO_RESPONDER}
-    <div style="padding:28px 24px;">
-      <p style="margin-top:0;font-size:15px;color:#334155;">Estimado/a <strong>${escaparHtml(d.tutor || 'tutor/a')}</strong>:</p>
-      ${bloque}
+    <div style="padding:28px 24px;color:#334155;">
+      <h2 style="margin:0 0 20px;font-size:17px;font-weight:700;letter-spacing:0.5px;color:${inicial ? '#b91c1c' : '#15803d'};">${titulo}</h2>
+      <p style="margin:0 0 12px;font-size:15px;">Estimado padre de familia:</p>
+      <p style="margin:0 0 20px;font-size:14px;line-height:1.55;">${intro}</p>
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#1e293b;">${encabezadoDatos}</p>
       <table style="width:100%;font-size:13px;color:#1e293b;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">
-        <tr><td style="padding:8px 12px;color:#64748b;">Alumno</td><td style="padding:8px 12px;font-weight:600;">${escaparHtml(d.alumno)}</td></tr>
-        <tr><td style="padding:8px 12px;color:#64748b;">Taller</td><td style="padding:8px 12px;font-weight:600;">${escaparHtml(d.taller)}</td></tr>
-        <tr><td style="padding:8px 12px;color:#64748b;">Fecha de la sesión</td><td style="padding:8px 12px;font-weight:600;">${escaparHtml(d.fecha)}</td></tr>
-        <tr><td style="padding:8px 12px;color:#64748b;">Estado</td><td style="padding:8px 12px;font-weight:600;color:${inicial ? '#dc2626' : '#16a34a'};">${inicial ? 'AUSENTE' : estado}</td></tr>
+        ${filas}
       </table>
-      <p style="font-size:13px;color:#64748b;line-height:1.5;margin-top:20px;">
-        ${
-          inicial
-            ? 'Si la falta tiene justificación, comuníquese con el docente del taller o con la coordinación del colegio.'
-            : 'No es necesario hacer nada más. Gracias por su atención.'
-        }
-      </p>
-      <p style="margin-bottom:0;font-size:13px;color:#1e293b;">
-        Atentamente,<br/><strong>Coordinación de Arte y Cultura</strong><br/>${escaparHtml(d.institucion)}
+      <p style="margin:20px 0 0;font-size:14px;">Agradecemos su atención.</p>
+      <p style="margin:20px 0 0;font-size:13px;color:#1e293b;">
+        <strong>Coordinación de Cultura</strong><br/>${escaparHtml(d.institucion)}
       </p>
     </div>
     <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:14px 24px;font-size:11px;color:#94a3b8;text-align:center;">
@@ -197,6 +212,7 @@ interface Aviso {
   asistenciaId: string;
   estudianteId: string;
   alumno: string;
+  gradoSeccion: string;
   tutorId: string | null;
   tutorNombre: string;
   tutorEmail: string;
@@ -291,7 +307,7 @@ async function manejar(req: Request): Promise<Response> {
   const idsAlumno = [...new Set(asistencias.map((a) => String(a.estudiante_id)))];
   const { data: alumnos } = await admin
     .from('estudiantes')
-    .select('id, nombre, apellido, tutor_id')
+    .select('id, nombre, apellido, grado, aula_regular, tutor_id')
     .in('id', idsAlumno);
   const idsTutor = [...new Set((alumnos ?? []).map((e) => String(e.tutor_id ?? '')).filter(Boolean))];
   const { data: tutores } = idsTutor.length
@@ -318,6 +334,7 @@ async function manejar(req: Request): Promise<Response> {
       asistenciaId: String(a.id),
       estudianteId: String(est.id),
       alumno,
+      gradoSeccion: gradoYSeccion(est.grado, est.aula_regular),
       tutorId: tutor.id ? String(tutor.id) : null,
       tutorNombre: String(tutor.nombre ?? ''),
       tutorEmail: email,
@@ -347,7 +364,7 @@ async function manejar(req: Request): Promise<Response> {
   const { data: config } = await admin.from('configuracion').select('nombre_institucion').limit(1).maybeSingle();
   const institucion = String(config?.nombre_institucion || 'Colegio Centro América');
   const taller = String(grupo?.nombre || 'Taller');
-  const fecha = fechaSesionLarga(String(sesion.fecha));
+  const fecha = fechaCorta(String(sesion.fecha));
   const remitente = remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser);
 
   const resultado = await enviarLote(admin, pendientes, {
@@ -398,8 +415,8 @@ async function enviarLote(
     const { asunto, html, texto } = construirAviso({
       institucion: o.institucion,
       tipo: o.tipo,
-      tutor: aviso.tutorNombre,
       alumno: aviso.alumno,
+      gradoSeccion: aviso.gradoSeccion,
       taller: o.taller,
       fecha: o.fecha,
       nuevoEstatus: aviso.nuevoEstatus,

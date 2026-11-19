@@ -414,11 +414,27 @@ class SyncStore {
           if (oldRow?.id !== undefined) map.delete(rowId(oldRow));
         } else {
           const newRow = payload.new as Row;
-          map.set(rowId(newRow), normalizeFromDb(newRow));
+          const id = rowId(newRow);
+          // En un UPDATE, Postgres no incluye los valores TOAST que no cambiaron (textos largos como
+          // contrato_texto o firma_digital_url): la clave falta en payload.new. Reemplazar la fila
+          // entera los perdía en memoria, y el siguiente guardado de esa fila los enviaba como null
+          // (error NOT NULL o, peor, borrado). Se conservan los valores conocidos y se relee la fila.
+          const faltantes = TABLES[key].columns.filter((c) => !(c in newRow));
+          const previa = map.get(id);
+          map.set(id, normalizeFromDb(previa ? { ...previa, ...newRow } : newRow));
+          if (faltantes.length > 0) void this.releerFila(key, id);
         }
         this.scheduleExternalNotify(key);
       })
       .subscribe();
+  }
+
+  /** Vuelve a leer una fila completa de Supabase (tras un evento realtime con columnas omitidas) */
+  private async releerFila(key: StorageKey, id: string) {
+    const { data, error } = await supabase.from(TABLES[key].table).select('*').eq('id', id).maybeSingle();
+    if (error || !data) return;
+    this.data.get(key)!.set(id, normalizeFromDb(data as Row));
+    this.scheduleExternalNotify(key);
   }
 
   private scheduleExternalNotify(key: StorageKey) {

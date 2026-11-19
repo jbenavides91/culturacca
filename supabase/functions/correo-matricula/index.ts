@@ -307,7 +307,7 @@ function construirCorreo(d: {
         El alumno se incorpora al taller cuando Caja confirme el pago.
       </div>
       <p style="margin-bottom:0;margin-top:24px;font-size:13px;color:#1e293b;">
-        Atentamente,<br/><strong>Coordinación de Arte y Cultura</strong><br/>${escaparHtml(d.institucion)}
+        Atentamente,<br/><strong>Coordinación de Cultura</strong><br/>${escaparHtml(d.institucion)}
       </p>
     </div>
     <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:14px 24px;font-size:11px;color:#94a3b8;text-align:center;">
