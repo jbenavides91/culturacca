@@ -80,6 +80,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   // Step 3: Contract & Digital Signature
   const [firmaDigitalUrl, setFirmaDigitalUrl] = useState('');
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  // Se volvió atrás desde el paso 3 tras firmar: hay que firmar de nuevo el contrato corregido
+  const [firmaReiniciada, setFirmaReiniciada] = useState(false);
+  // Cuerpo desplazable del modal (al cambiar de paso se vuelve al inicio)
+  const cuerpoRef = useRef<HTMLDivElement>(null);
 
   // Result / Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -326,6 +330,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       return;
     }
     setStep(2);
+    cuerpoRef.current?.scrollTo({ top: 0 });
   };
 
   // Validation before going to Step 3
@@ -340,6 +345,24 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       return;
     }
     setStep(3);
+    cuerpoRef.current?.scrollTo({ top: 0 });
+  };
+
+  /**
+   * Vuelve a un paso anterior para corregir datos (los ya escritos se conservan). Al salir del paso 3
+   * se borran la firma y la aceptación: el contrato cambia con los datos y el recuadro de firma se
+   * vuelve a montar vacío, así que firmar de nuevo evita enviar una firma que no se ve.
+   */
+  const irAPaso = (destino: 1 | 2) => {
+    if (step >= 4 || destino >= step) return;
+    setErrorMessage(null);
+    if (step === 3) {
+      if (firmaDigitalUrl || aceptaTerminos) setFirmaReiniciada(true);
+      setFirmaDigitalUrl('');
+      setAceptaTerminos(false);
+    }
+    setStep(destino);
+    cuerpoRef.current?.scrollTo({ top: 0 });
   };
 
   // Submit enrollment request
@@ -438,9 +461,14 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
         {/* Stepper Wizard Progress */}
         <div className="bg-[#F7F8FA] dark:bg-[#151A22] border-b border-[#E7EAF0] dark:border-[#2B3442] px-4 sm:px-6 py-3 shrink-0">
           <div className="flex items-center justify-between max-w-xl mx-auto text-xs">
-            {/* Step 1 */}
-            <div
-              className={`flex items-center space-x-2 font-semibold ${
+            {/* Step 1 (clic para volver a corregir datos) */}
+            <button
+              type="button"
+              onClick={() => irAPaso(1)}
+              disabled={!(step > 1 && step < 4) || isSubmitting}
+              aria-label="Volver al paso 1: datos del alumno y tutor"
+              title={step > 1 && step < 4 ? 'Volver a los datos del alumno y tutor' : undefined}
+              className={`flex items-center space-x-2 font-semibold rounded-lg px-1 -mx-1 enabled:cursor-pointer enabled:hover:underline disabled:cursor-default ${
                 step >= 1 ? 'text-[#4F46E5] dark:text-[#818CF8]' : 'text-slate-400'
               }`}
             >
@@ -456,7 +484,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 {step > 1 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '1'}
               </div>
               <span className="hidden sm:inline">1. Alumno y Tutor</span>
-            </div>
+            </button>
 
             <div className="flex-1 h-0.5 mx-3 bg-slate-200 dark:bg-slate-700">
               <div
@@ -465,9 +493,14 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
               ></div>
             </div>
 
-            {/* Step 2 */}
-            <div
-              className={`flex items-center space-x-2 font-semibold ${
+            {/* Step 2 (clic para volver a elegir talleres) */}
+            <button
+              type="button"
+              onClick={() => irAPaso(2)}
+              disabled={step !== 3 || isSubmitting}
+              aria-label="Volver al paso 2: talleres"
+              title={step === 3 ? 'Volver a la selección de talleres' : undefined}
+              className={`flex items-center space-x-2 font-semibold rounded-lg px-1 -mx-1 enabled:cursor-pointer enabled:hover:underline disabled:cursor-default ${
                 step >= 2 ? 'text-[#4F46E5] dark:text-[#818CF8]' : 'text-slate-400'
               }`}
             >
@@ -483,7 +516,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 {step > 2 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '2'}
               </div>
               <span className="hidden sm:inline">2. Talleres</span>
-            </div>
+            </button>
 
             <div className="flex-1 h-0.5 mx-3 bg-slate-200 dark:bg-slate-700">
               <div
@@ -523,10 +556,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
         )}
 
         {/* Modal Body / Steps */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          {/* STEP 1: Student and Tutor Information */}
+        <div ref={cuerpoRef} className="p-4 sm:p-6 overflow-y-auto flex-1">
+          {/* STEP 1: Student and Tutor Information (su botón "Continuar" está en el pie fijo) */}
           {step === 1 && (
-            <form onSubmit={handleValidateStep1} className="space-y-5">
+            <form id="form-matricula-paso1" onSubmit={handleValidateStep1} className="space-y-5">
               <div>
                 <h4 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9] mb-1 flex items-center space-x-2">
                   <Users className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8]" />
@@ -809,15 +842,6 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-4 border-t border-[#E7EAF0] dark:border-[#2B3442]">
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 cursor-pointer"
-                >
-                  <span>Continuar a Selección de Taller</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
             </form>
           )}
 
@@ -1004,26 +1028,6 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-4 border-t border-[#E7EAF0] dark:border-[#2B3442]">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="px-4 py-2 border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs font-semibold text-[#667085] dark:text-[#94A3B8] hover:bg-slate-50 dark:hover:bg-[#151A22] transition flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Volver a Datos</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleValidateStep2}
-                  disabled={selectedGrupos.length === 0 || !!problemaSeleccion}
-                  className="px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
-                >
-                  <span>Continuar a Contrato y Firma</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -1066,6 +1070,13 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 </div>
               ))}
 
+              {firmaReiniciada && !firmaDigitalUrl && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span>Se corrigieron datos: el contrato se actualizó. El padre o tutor debe firmarlo y aceptarlo de nuevo.</span>
+                </div>
+              )}
+
               {/* Digital Signature Canvas */}
               <div className="pt-2">
                 <DigitalSignaturePad
@@ -1095,37 +1106,6 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 </label>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-[#E7EAF0] dark:border-[#2B3442]">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs font-semibold text-[#667085] dark:text-[#94A3B8] hover:bg-slate-50 dark:hover:bg-[#151A22] transition flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Volver a Selección</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSubmitEnrollment}
-                  disabled={isSubmitting || !firmaDigitalUrl || !aceptaTerminos}
-                  className="px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? (
-                    <span>Registrando Solicitud...</span>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>
-                        {selectedGrupos.length > 1
-                          ? `Firmar y Enviar ${selectedGrupos.length} Solicitudes a Caja`
-                          : 'Firmar y Enviar Solicitud a Caja'}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
           )}
 
@@ -1292,6 +1272,88 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
             );
           })()}
         </div>
+
+        {/* Pie fijo con la navegación: siempre visible, aunque el paso sea largo (contratos y firma) */}
+        {step < 4 && (
+          <div className="shrink-0 border-t border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D] px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
+            {step === 1 ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 sm:flex-none justify-center px-4 py-2.5 border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs font-semibold text-[#667085] dark:text-[#94A3B8] hover:bg-slate-50 dark:hover:bg-[#151A22] transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+                <span>Cancelar</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => irAPaso(step === 3 ? 2 : 1)}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-none justify-center px-4 py-2.5 border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs font-semibold text-[#172033] dark:text-[#F1F5F9] hover:bg-slate-50 dark:hover:bg-[#151A22] transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={step === 3 ? 'Volver a la selección de talleres' : 'Volver a los datos del alumno y tutor'}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>
+                  Atrás<span className="hidden sm:inline">{step === 3 ? ': Talleres' : ': Datos del alumno'}</span>
+                </span>
+              </button>
+            )}
+
+            {step === 1 && (
+              <button
+                type="submit"
+                form="form-matricula-paso1"
+                className="flex-1 sm:flex-none justify-center px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer"
+              >
+                <span>
+                  Continuar<span className="hidden sm:inline"> a Selección de Taller</span>
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+
+            {step === 2 && (
+              <button
+                type="button"
+                onClick={handleValidateStep2}
+                disabled={selectedGrupos.length === 0 || !!problemaSeleccion}
+                className="flex-1 sm:flex-none justify-center px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <span>
+                  Continuar<span className="hidden sm:inline"> a Contrato y Firma</span>
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+
+            {step === 3 && (
+              <button
+                type="button"
+                onClick={handleSubmitEnrollment}
+                disabled={isSubmitting || !firmaDigitalUrl || !aceptaTerminos}
+                className="flex-1 sm:flex-none justify-center px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                title={!firmaDigitalUrl || !aceptaTerminos ? 'Falta la firma y la aceptación del contrato' : undefined}
+              >
+                {isSubmitting ? (
+                  <span>Registrando…</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      <span className="sm:hidden">Firmar y enviar</span>
+                      <span className="hidden sm:inline">
+                        {selectedGrupos.length > 1
+                          ? `Firmar y Enviar ${selectedGrupos.length} Solicitudes a Caja`
+                          : 'Firmar y Enviar Solicitud a Caja'}
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

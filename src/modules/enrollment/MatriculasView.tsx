@@ -19,6 +19,7 @@ import {
   Mail,
   MailWarning,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Perfil, SolicitudMatricula, Grupo } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -67,6 +68,31 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
       );
     } finally {
       setEnviandoCorreoId(null);
+    }
+  };
+
+  /** ADMIN y MATRICULA pueden borrar solicitudes nuevas que aún no pasaron por Caja */
+  const puedeEliminar = (sol: SolicitudMatricula) =>
+    (currentProfile.rol === 'ADMIN' || currentProfile.rol === 'MATRICULA') &&
+    sol.estado === 'PENDIENTE_CAJA' &&
+    sol.tipo_tramite !== 'RENOVACION_ANUAL';
+
+  const eliminarSolicitud = (sol: SolicitudMatricula) => {
+    const alumno = `${sol.nombre_alumno} ${sol.apellido_alumno}`.trim();
+    const aviso = [
+      `¿Eliminar la solicitud ${sol.codigo_solicitud} de ${alumno} (${sol.grupo_nombre})?`,
+      'Se libera su cupo en el taller. No se puede deshacer.',
+      sol.correo_enviado_en ? 'El tutor ya recibió el correo con el contrato.' : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    if (!window.confirm(aviso)) return;
+    try {
+      storageService.eliminarSolicitudPendiente(sol.id);
+      setToastMessage(`Solicitud ${sol.codigo_solicitud} de ${alumno} eliminada.`);
+    } catch (err) {
+      // El aviso de esta vista es de éxito (verde): los errores van en una alerta
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar la solicitud.');
     }
   };
 
@@ -556,6 +582,17 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
                           >
                             <Receipt className="w-3.5 h-3.5" />
                             <span>Cobrar en Caja</span>
+                          </button>
+                        )}
+
+                        {puedeEliminar(sol) && (
+                          <button
+                            onClick={() => eliminarSolicitud(sol)}
+                            className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                            title="Eliminar solicitud (aún no pasa por Caja)"
+                            aria-label={`Eliminar la solicitud ${sol.codigo_solicitud}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
 

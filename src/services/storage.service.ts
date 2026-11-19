@@ -3909,6 +3909,31 @@ class StorageService {
     return { solicitud: updatedSolicitud, estudiante, grupo };
   }
 
+  /**
+   * Elimina una solicitud de matrícula que aún no pasó por Caja (ADMIN o MATRICULA), p. ej. un registro
+   * con datos equivocados. Todavía no hay alumno, inscripción ni movimiento que deshacer, y el cupo que
+   * reservaba se libera solo (ocupacionTaller cuenta las PENDIENTE_CAJA). Las renovaciones no: al crearlas
+   * dejan al alumno en PENDIENTE_RENOVACION y no se guarda su estado anterior.
+   */
+  eliminarSolicitudPendiente(id: string): SolicitudMatricula {
+    const rol = this.perfilActual?.rol;
+    if (rol !== 'ADMIN' && rol !== 'MATRICULA') {
+      throw new Error('Solo Administración o Matrícula pueden eliminar solicitudes.');
+    }
+    const solicitud = this.getSolicitudesMatricula().find((m) => m.id === id);
+    if (!solicitud) throw new Error('Solicitud no encontrada.');
+    if (solicitud.estado !== 'PENDIENTE_CAJA') {
+      throw new Error(`La solicitud ${solicitud.codigo_solicitud} ya pasó por Caja; no se puede eliminar.`);
+    }
+    if (solicitud.tipo_tramite === 'RENOVACION_ANUAL') {
+      throw new Error('Las renovaciones pendientes se resuelven en Caja; no se pueden eliminar desde aquí.');
+    }
+    this.remove(STORAGE_KEYS.MATRICULAS, [id]);
+    cacheService.invalidateByTag('matriculas');
+    notifyDataChange();
+    return solicitud;
+  }
+
   rechazarSolicitudMatricula(id: string, motivo: string): SolicitudMatricula {
     const lista = this.getSolicitudesMatricula();
     const index = lista.findIndex((m) => m.id === id);
