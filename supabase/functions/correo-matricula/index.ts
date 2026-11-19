@@ -52,6 +52,21 @@ Deno.serve(async (req) => {
   return new Response(respuesta.body, { status: respuesta.status, headers });
 });
 
+// ---------- Correo automático: "no responder" ----------
+// Ningún correo impide pulsar "Responder": se marca como automático en el remitente, una franja,
+// el pie y el texto plano, y se pide a los servidores que no envíen respuestas automáticas.
+const FRANJA_NO_RESPONDER =
+  '<div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:10px 24px;font-size:12px;color:#92400e;text-align:center;">Correo automático · Por favor, no responda a este mensaje.</div>';
+const PIE_NO_RESPONDER =
+  'Este es un correo automático y esta dirección no recibe respuestas. Para cualquier consulta, comuníquese con la coordinación del colegio.';
+const TEXTO_NO_RESPONDER = '\n\nCorreo automático: no responda a este mensaje.';
+const ENCABEZADOS_NO_RESPONDER = { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' };
+/** "Nombre - No responder <cuenta>" (sin paréntesis: en un remitente sin comillas serían un comentario) */
+const remitenteNoResponder = (nombre: string, cuenta: string) => {
+  const limpio = nombre.replace(/[<>"()]/g, '').trim();
+  return `${/responder/i.test(limpio) ? limpio : `${limpio} - No responder`} <${cuenta}>`;
+};
+
 // ---------- Utilidades de texto ----------
 
 const escaparHtml = (v: unknown) =>
@@ -66,12 +81,12 @@ const escaparHtml = (v: unknown) =>
 const aWinAnsi = (texto: string) =>
   texto
     .replace(/\t/g, '    ')
-    .replace(/[‐-―]/g, '-')
-    .replace(/[‘’]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, '...')
-    .replace(/[   ]/g, ' ')
-    .replace(/[^\n\x20-\x7E¡-ÿ€•]/g, '');
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[^\n\x20-\x7E\u00A1-\u00FF\u20AC\u2022]/g, '');
 
 const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -251,6 +266,7 @@ function construirCorreo(d: {
       <h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:.5px;">${escaparHtml(d.institucion.toUpperCase())}</h1>
       <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">Talleres extracurriculares de arte y cultura</p>
     </div>
+    ${FRANJA_NO_RESPONDER}
     <div style="padding:28px 24px;color:#334155;">
       <p style="margin-top:0;font-size:15px;">Estimado/a <strong>${escaparHtml(d.tutor || 'Tutor/a')}</strong>:</p>
       <p style="font-size:14px;line-height:1.55;">
@@ -283,7 +299,7 @@ function construirCorreo(d: {
       </p>
     </div>
     <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:14px 24px;font-size:11px;color:#94a3b8;text-align:center;">
-      Correo automático. Si tiene dudas sobre la matrícula, comuníquese con la coordinación del colegio.
+      ${PIE_NO_RESPONDER}
     </div>
   </div>`;
 }
@@ -418,13 +434,14 @@ async function manejar(req: Request): Promise<Response> {
         auth: { username: gmailUser, password: gmailPassword },
       },
     });
-    const nombreRemitente = (Deno.env.get('MAIL_FROM_NAME') || institucion).replace(/[<>"]/g, '');
+    const remitente = remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser);
     try {
       await cliente.send({
-        from: `${nombreRemitente} <${gmailUser}>`,
+        from: remitente,
         to: destinatario,
         subject: `Matrícula ${codigo} – ${alumno}${taller ? ` · ${taller}` : ''}`,
-        content: `Resumen de la matrícula ${codigo} de ${alumno}. El contrato firmado va adjunto en PDF.`,
+        content: `Resumen de la matrícula ${codigo} de ${alumno}. El contrato firmado va adjunto en PDF.${TEXTO_NO_RESPONDER}`,
+        headers: ENCABEZADOS_NO_RESPONDER,
         html,
         attachments: [
           {

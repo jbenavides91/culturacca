@@ -53,6 +53,21 @@ Deno.serve(async (req) => {
   return new Response(respuesta.body, { status: respuesta.status, headers });
 });
 
+// ---------- Correo automático: "no responder" ----------
+// Ningún correo impide pulsar "Responder": se marca como automático en el remitente, una franja,
+// el pie y el texto plano, y se pide a los servidores que no envíen respuestas automáticas.
+const FRANJA_NO_RESPONDER =
+  '<div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:10px 24px;font-size:12px;color:#92400e;text-align:center;">Correo automático · Por favor, no responda a este mensaje.</div>';
+const PIE_NO_RESPONDER =
+  'Este es un correo automático y esta dirección no recibe respuestas. Para cualquier consulta, comuníquese con la coordinación del colegio.';
+const TEXTO_NO_RESPONDER = '\n\nCorreo automático: no responda a este mensaje.';
+const ENCABEZADOS_NO_RESPONDER = { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' };
+/** "Nombre - No responder <cuenta>" (sin paréntesis: en un remitente sin comillas serían un comentario) */
+const remitenteNoResponder = (nombre: string, cuenta: string) => {
+  const limpio = nombre.replace(/[<>"()]/g, '').trim();
+  return `${/responder/i.test(limpio) ? limpio : `${limpio} - No responder`} <${cuenta}>`;
+};
+
 // ---------- Utilidades ----------
 
 const escaparHtml = (v: unknown) =>
@@ -134,6 +149,7 @@ function construirAviso(d: DatosAviso): { asunto: string; html: string; texto: s
       <h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:0.5px;">${escaparHtml(d.institucion.toUpperCase())}</h1>
       <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">Talleres de Arte y Cultura · Control de asistencia</p>
     </div>
+    ${FRANJA_NO_RESPONDER}
     <div style="padding:28px 24px;">
       <p style="margin-top:0;font-size:15px;color:#334155;">Estimado/a <strong>${escaparHtml(d.tutor || 'tutor/a')}</strong>:</p>
       ${bloque}
@@ -155,7 +171,7 @@ function construirAviso(d: DatosAviso): { asunto: string; html: string; texto: s
       </p>
     </div>
     <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:14px 24px;font-size:11px;color:#94a3b8;text-align:center;">
-      Correo automático del sistema de asistencia.
+      ${PIE_NO_RESPONDER}
     </div>
   </div>`;
 
@@ -320,7 +336,7 @@ async function manejar(req: Request): Promise<Response> {
   const institucion = String(config?.nombre_institucion || 'Colegio Centro América');
   const taller = String(grupo?.nombre || 'Taller');
   const fecha = fechaSesionLarga(String(sesion.fecha));
-  const remitente = `${(Deno.env.get('MAIL_FROM_NAME') || institucion).replace(/[<>"]/g, '')} <${gmailUser}>`;
+  const remitente = remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser);
 
   const resultado = await enviarLote(admin, pendientes, {
     gmailUser,
@@ -386,7 +402,14 @@ async function enviarLote(
       for (let intento = 1; intento <= 2; intento++) {
         try {
           cliente ??= nuevoCliente();
-          await cliente.send({ from: o.remitente, to: aviso.tutorEmail, subject: asunto, content: texto, html });
+          await cliente.send({
+            from: o.remitente,
+            to: aviso.tutorEmail,
+            subject: asunto,
+            content: `${texto}${TEXTO_NO_RESPONDER}`,
+            html,
+            headers: ENCABEZADOS_NO_RESPONDER,
+          });
           error = null;
           break;
         } catch (err) {
