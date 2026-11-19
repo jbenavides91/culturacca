@@ -295,6 +295,51 @@ export interface ConfiguracionSistema {
   updated_at: string;
 }
 
+/** Evento institucional (Día del Libro, Fiestas Patrias…) con talleres y alumnos participantes */
+export type EstadoEvento = 'ABIERTO' | 'CERRADO';
+
+export interface Evento {
+  id: string;
+  nombre: string;
+  fecha: string; // YYYY-MM-DD
+  lugar?: string | null;
+  descripcion?: string | null;
+  estado: EstadoEvento;
+  creado_por?: string | null;
+  creado_en: string;
+}
+
+/** Taller asignado por ADMIN a un evento */
+export interface EventoTaller {
+  id: string;
+  evento_id: string;
+  grupo_id: string;
+}
+
+/** Alumno elegido por el docente para participar con su taller en un evento */
+export interface EventoParticipante {
+  id: string;
+  evento_id: string;
+  grupo_id: string;
+  estudiante_id: string;
+  registrado_por?: string | null;
+  creado_en: string;
+}
+
+/** Fila de la lista consolidada del evento (orden: grado, sección, apellido, nombre) */
+export interface FilaParticipanteEvento {
+  participante_id: string;
+  estudiante_id: string;
+  grado: string;
+  seccion: string;
+  apellido: string;
+  nombre: string;
+  matricula: string;
+  grupo_id: string;
+  taller: string;
+  docente: string;
+}
+
 /** Nivel de ocupación de un taller */
 export type NivelCupo = 'SIN_CUPO' | 'DISPONIBLE' | 'ALERTA' | 'LLENO';
 

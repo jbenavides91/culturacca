@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-**Backend is Supabase** (Postgres + Auth + Realtime + two Edge Functions: `admin-usuarios` and `correo-matricula`), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`; `0010_grados.sql`; `0011_dias_no_lectivos.sql`; `0012_cortes_bimestrales.sql`; `0013_correo_matricula.sql`; `0014_cupo_talleres.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
+**Backend is Supabase** (Postgres + Auth + Realtime + two Edge Functions: `admin-usuarios` and `correo-matricula`), accessed directly from the browser with the anon key (`src/services/supabase.client.ts`); security is enforced by RLS. Schema, RLS policies and realtime publication live in `supabase/migrations/` (`0001_init.sql` base schema; `0002_plantilla_contrato.sql`; `0003_anecdotario.sql`; `0004_salones.sql`; `0005_corregir_fechas_sesiones.sql`, a one-off data fix; `0006_arancel.sql`; `0007_optimizar_politicas_rls.sql`; `0008_sesiones_extraordinarias.sql`; `0009_anecdotario_edicion_admin.sql`; `0010_grados.sql`; `0011_dias_no_lectivos.sql`; `0012_cortes_bimestrales.sql`; `0013_correo_matricula.sql`; `0014_cupo_talleres.sql`; `0015_eventos.sql`). The `admin-usuarios` Edge Function (`supabase/functions/`, Deno, excluded from `tsconfig`) uses the service role. Its actions are `create`, `update` (profile plus Auth email/password), `delete`, and `grant_access` (gives a login to a legacy profile and moves its references). Every action requires an active ADMIN caller. After editing it, redeploy through the MCP `deploy_edge_function` (name `admin-usuarios`, `verify_jwt: false`, passing the full `index.ts`); `list_edge_functions` shows the deployed version. It is deployed with `verify_jwt: false` because it validates the caller's session and ADMIN role itself, which also avoids CORS-preflight issues with the `sb_publishable_` key. The service-role key must never reach the frontend or `.env.local`. `express`, `dotenv` and `@google/genai` are unused leftovers from AI Studio.
 
 **Navigation is state-based, not routed.** `src/App.tsx` holds `currentTab: NavTab` (type defined in `modules/navigation/Sidebar.tsx`) and conditionally renders one view per tab. Cross-module navigation is done via callbacks passed down from `App` (e.g. `onSelectWorkshop` sets the selected group and switches to the `asistencia` tab). When adding a tab: update `NavTab`, `Sidebar`, `ROLE_CONFIGS` in `utils/rbac.ts`, and the render switch in `App.tsx`.
 
@@ -45,7 +45,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **RBAC** (`src/utils/rbac.ts`): roles `ADMIN`, `PROFESOR`, `CAJERO`, `MATRICULA`, each with an allowed-tab list and a default tab. `App` blocks disallowed tabs; views also receive `currentProfile` and filter data by role (e.g. professors see only their own groups). The UI rules must stay consistent with the RLS write policies in the SQL migrations. Reads are open to any active profile, except `anecdotario` (see below). Writes:
 - ADMIN: everything; only ADMIN writes `grupos`, `perfiles`, `configuracion`, `salones` and `grados`.
-- PROFESOR: `asistencias`, `sesiones`, `log_notificaciones`, and inserting its own `anecdotario` notes.
+- PROFESOR: `asistencias`, `sesiones`, `log_notificaciones`, inserting its own `anecdotario` notes, and `evento_participantes` of its own workshops while the event is open.
 - CAJERO and MATRICULA: `matriculas`, `estudiantes`, `tutores`, `inscripciones`.
 
 Some rules are stricter than RLS and are enforced only in the UI and the service. The database would allow these writes, so they must be kept in both places:
@@ -198,6 +198,37 @@ Callers:
   - the enrollment wizard: full workshops are disabled, ALERTA says "Quedan N lugares", and step 3 shows the bar;
   - Talleres → Alumnos: a header bar counting the selection; "Cupo completo" blocks checking more, and "Marcar disponibles" stops at the free spots;
   - Caja, on pending requests.
+
+**Eventos** (nav tab `eventos`, `src/modules/events/`; ADMIN and PROFESOR): participant lists for school activities such as Día del Libro, Fiestas Patrias or Día de las Madres, which the principals request.
+- **Tables** (migration `0015`):
+  - `eventos` (`nombre`, `fecha`, `lugar`, `descripcion`, `estado` ABIERTO/CERRADO, `creado_por`);
+  - `evento_talleres` (`evento_id`, `grupo_id`, unique);
+  - `evento_participantes` (`evento_id`, `grupo_id`, `estudiante_id`, `registrado_por`, unique per event, workshop and student; a student in two workshops can appear once per workshop).
+  - All FKs use `on delete cascade`.
+  - The two child tables are `insertOnly` (rows are added and removed, never updated).
+- **RLS:**
+  - Any active profile reads.
+  - `eventos` and `evento_talleres`: only ADMIN writes.
+  - `evento_participantes`: ADMIN always inserts and deletes. A PROFESOR only does so when the workshop is theirs (`grupos.profesor_id = auth.uid()`), the workshop is assigned to the event (insert), and the event is `ABIERTO`.
+  - This is the first **ownership-based** write policy outside `anecdotario`.
+  - Verified with a rolled-back 17-case RLS test:
+    - ADMIN creates, edits, closes and deletes (with cascade).
+    - PROFESOR: adding to their own assigned, open workshop works. Adding to another teacher's workshop, to an unassigned workshop or to a closed event is denied, as are creating events and assigning workshops. Closing an event and deleting someone else's participant affect 0 rows; deleting their own participant works.
+    - CAJERO is denied and deletes 0 rows.
+    - anon reads 0 rows.
+- **Service:**
+  - `crearEvento` / `actualizarEvento` (ADMIN, with the list of workshops; removing a workshop also removes its participants, and `participantesAfectados` warns first);
+  - `cambiarEstadoEvento` (close or reopen);
+  - `eliminarEvento`;
+  - `puedeElegirParticipantes`;
+  - `guardarParticipantes(eventoId, grupoId, ids)`: a diff that accepts only active students enrolled in that workshop.
+  - `filasEvento(eventoId, gruposPermitidos?)` sorts by grade (catalogue order, with the `GRADOS_ESCOLARES` fallback), then section (`aula_regular`), surname and first name. It computes the grade order itself rather than using `utils/grados.ts`, which imports `storageService` (circular import).
+- **UI:**
+  - `EventosView` lists event cards (Próximos / Pasados / Todos, search). A PROFESOR only sees events where one of their workshops takes part.
+  - The detail has one `ParticipantesTaller` per assigned workshop (a teacher only sees their own), with checkboxes, Marcar todos and Guardar. It is read-only when closed, except for ADMIN.
+  - Next to it is the consolidated list, grouped by grade with subtotals.
+  - `EventoFormModal` (ADMIN) edits the details and the workshop checkboxes.
+- **Excel:** `exportService.exportEvento(eventoId, gruposPermitidos?)` writes the sheets "Participantes" (event header, then N°, Grado, Sección, Apellidos, Nombres, Matrícula, Taller, Docente, with an autofilter) and "Resumen" (by workshop, and by grade and section). A teacher exports only their own workshops.
 
 **Grados** (table `grados` with `nombre`, `orden`, `activo`; ADMIN writes; managed in Configuración → Grados / `GradosTab.tsx`) are never hard-coded. `estudiantes.grado` and `matriculas.grado` store the grade **name**, not an id.
 - To list grades, use `gradosDisponibles(actual?)` from `src/utils/grados.ts`: active grades in `orden`. Pass the current value when editing so an inactive or legacy grade is not lost. Use `indiceGrado()` to sort by grade.

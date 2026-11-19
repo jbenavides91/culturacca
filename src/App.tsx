@@ -6,6 +6,7 @@ import { RollCallView } from './modules/attendance/RollCallView';
 import { WorkshopsView } from './modules/workshops/WorkshopsView';
 import { StudentsView } from './modules/students/StudentsView';
 import { ReportsView } from './modules/reports/ReportsView';
+import { EventosView } from './modules/events/EventosView';
 import { SettingsView } from './modules/settings/SettingsView';
 import { MatriculasView } from './modules/enrollment/MatriculasView';
 import { CashierView } from './modules/cashier/CashierView';
@@ -215,6 +216,10 @@ export default function App() {
 
               {currentTab === 'reportes' && (
                 <ReportsView currentProfile={activeProfile} />
+              )}
+
+              {currentTab === 'eventos' && (
+                <EventosView currentProfile={activeProfile} />
               )}
 
               {currentTab === 'config' && (

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Receipt,
   FileSignature,
+  PartyPopper,
   X,
 } from 'lucide-react';
 import { Perfil } from '../../types/attendance';
@@ -24,6 +25,7 @@ export type NavTab =
   | 'caja'
   | 'estudiantes'
   | 'reportes'
+  | 'eventos'
   | 'config';
 
 interface NavCategory {
@@ -91,6 +93,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id: 'caja',
               label: 'Caja y Solvencias',
               icon: <Receipt className="w-4 h-4 shrink-0" />,
+            },
+            {
+              id: 'eventos',
+              label: 'Eventos',
+              icon: <PartyPopper className="w-4 h-4 shrink-0" />,
             },
           ],
         },
@@ -169,6 +176,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id: 'grupos',
               label: 'Mis talleres',
               icon: <Palette className="w-4 h-4 shrink-0" />,
+            },
+            {
+              id: 'eventos',
+              label: 'Eventos',
+              icon: <PartyPopper className="w-4 h-4 shrink-0" />,
             },
             {
               id: 'reportes',

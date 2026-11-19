@@ -27,7 +27,10 @@ export type StorageKey =
   | 'aa_grados'
   | 'aa_dias_no_lectivos'
   | 'aa_cortes_bimestrales'
-  | 'aa_movimientos_inscripcion';
+  | 'aa_movimientos_inscripcion'
+  | 'aa_eventos'
+  | 'aa_evento_talleres'
+  | 'aa_evento_participantes';
 
 interface TableDef {
   table: string;
@@ -149,6 +152,25 @@ export const TABLES: Record<StorageKey, TableDef> = {
       'registrado_por', 'creado_en',
     ],
     tags: ['movimientos', 'cortes'],
+    insertOnly: true,
+  },
+  aa_eventos: {
+    table: 'eventos',
+    columns: ['id', 'nombre', 'fecha', 'lugar', 'descripcion', 'estado', 'creado_por', 'creado_en'],
+    tags: ['eventos'],
+    defaults: { estado: 'ABIERTO' },
+  },
+  // Sin UPDATE en RLS: se agregan y se quitan filas
+  aa_evento_talleres: {
+    table: 'evento_talleres',
+    columns: ['id', 'evento_id', 'grupo_id'],
+    tags: ['eventos'],
+    insertOnly: true,
+  },
+  aa_evento_participantes: {
+    table: 'evento_participantes',
+    columns: ['id', 'evento_id', 'grupo_id', 'estudiante_id', 'registrado_por', 'creado_en'],
+    tags: ['eventos'],
     insertOnly: true,
   },
 };

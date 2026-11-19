@@ -585,6 +585,83 @@ export class ExportService {
       config,
     };
   }
+
+  /**
+   * Lista de participantes de un evento para Dirección: hoja "Participantes" (orden grado, sección,
+   * apellido, nombre) y hoja "Resumen" por taller y por grado/sección.
+   * `gruposPermitidos` limita los talleres (un docente exporta solo los suyos).
+   */
+  exportEvento(eventoId: string, gruposPermitidos?: string[]): void {
+    const evento = storageService.getEventoById(eventoId);
+    if (!evento) return;
+    const filas = storageService.filasEvento(eventoId, gruposPermitidos);
+    const [y, m, d] = evento.fecha.split('-').map(Number);
+    const fechaEvento = new Date(y, m - 1, d).toLocaleDateString('es-ES', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    // --- Hoja Participantes: encabezado del evento + tabla con autofiltro ---
+    const encabezado: (string | number)[][] = [
+      [nombreInstitucion().toUpperCase()],
+      [`LISTA DE PARTICIPANTES · ${evento.nombre.toUpperCase()}`],
+      ['Fecha del evento:', fechaEvento],
+      ['Lugar:', evento.lugar || '—'],
+      ['Total de participantes:', filas.length],
+      ['Fecha de emisión:', new Date().toLocaleDateString('es-ES')],
+      [''],
+    ];
+    const columnas = ['N°', 'Grado', 'Sección', 'Apellidos', 'Nombres', 'Matrícula', 'Taller', 'Docente'];
+    const cuerpo = filas.map((f, i) => [i + 1, f.grado, f.seccion, f.apellido, f.nombre, f.matricula, f.taller, f.docente]);
+    const wsParticipantes = XLSX.utils.aoa_to_sheet([...encabezado, columnas, ...cuerpo]);
+    const filaTitulos = encabezado.length;
+    wsParticipantes['!cols'] = [6, 14, 14, 24, 24, 14, 26, 26].map((wch) => ({ wch }));
+    wsParticipantes['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: filaTitulos, c: 0 },
+        e: { r: filaTitulos + Math.max(cuerpo.length, 1), c: columnas.length - 1 },
+      }),
+    };
+
+    // --- Hoja Resumen: por taller y por grado / sección ---
+    const porTaller = new Map<string, { docente: string; total: number }>();
+    const porGrado = new Map<string, number>();
+    filas.forEach((f) => {
+      const t = porTaller.get(f.taller) ?? { docente: f.docente, total: 0 };
+      t.total++;
+      porTaller.set(f.taller, t);
+      const clave = `${f.grado}|${f.seccion}`;
+      porGrado.set(clave, (porGrado.get(clave) ?? 0) + 1);
+    });
+    const resumen: (string | number)[][] = [
+      [`RESUMEN · ${evento.nombre}`],
+      ['Fecha del evento:', fechaEvento],
+      [''],
+      ['Taller', 'Docente', 'Participantes'],
+      ...[...porTaller.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], 'es'))
+        .map(([taller, v]) => [taller, v.docente, v.total]),
+      ['Total', '', filas.length],
+      [''],
+      ['Grado', 'Sección', 'Participantes'],
+      // Mismo orden que la lista (las filas ya vienen ordenadas por grado y sección)
+      ...[...porGrado.entries()].map(([clave, total]) => {
+        const [grado, seccion] = clave.split('|');
+        return [grado, seccion, total];
+      }),
+      ['Total', '', filas.length],
+    ];
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+    wsResumen['!cols'] = [{ wch: 28 }, { wch: 28 }, { wch: 14 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsParticipantes, 'Participantes');
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+    const nombre = evento.nombre.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
+    XLSX.writeFile(wb, `Evento_${nombre}_${evento.fecha}.xlsx`);
+  }
 }
 
 export const exportService = new ExportService();

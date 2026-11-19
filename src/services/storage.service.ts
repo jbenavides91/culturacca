@@ -1,4 +1,9 @@
 import {
+  Evento,
+  EventoParticipante,
+  EventoTaller,
+  FilaParticipanteEvento,
+  GRADOS_ESCOLARES,
   AlertaEstudiante,
   AlertasCupo,
   OcupacionTaller,
@@ -34,6 +39,7 @@ import { notificationService } from './notification.service';
 import { supabase } from './supabase.client';
 import { StorageKey, syncStore, TABLES } from './supabase.sync';
 import { fechaLocalISO, fechaPagoLocal } from '../utils/fechas';
+import { compararTexto } from '../utils/orden';
 
 const STORAGE_KEYS = {
   PERFILES: 'aa_perfiles',
@@ -52,6 +58,9 @@ const STORAGE_KEYS = {
   DIAS_NO_LECTIVOS: 'aa_dias_no_lectivos',
   CORTES: 'aa_cortes_bimestrales',
   MOVIMIENTOS: 'aa_movimientos_inscripcion',
+  EVENTOS: 'aa_eventos',
+  EVENTO_TALLERES: 'aa_evento_talleres',
+  EVENTO_PARTICIPANTES: 'aa_evento_participantes',
 } as const satisfies Record<string, StorageKey>;
 
 // Listeners for data updates
@@ -2147,6 +2156,251 @@ class StorageService {
     };
     this.write(STORAGE_KEYS.MOVIMIENTOS, [mov]);
     cacheService.invalidateByTag('movimientos');
+  }
+
+  // --- EVENTOS (ADMIN crea, asigna talleres y cierra; cada docente elige a sus alumnos) ---
+
+  getEventos(): Evento[] {
+    const cached = cacheService.get<Evento[]>('eventos_all');
+    if (cached) return cached;
+    const data = this.read<Evento[]>(STORAGE_KEYS.EVENTOS, [])
+      .map((e) => ({ ...e, fecha: String(e.fecha).slice(0, 10), estado: e.estado || 'ABIERTO' }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || compararTexto(a.nombre, b.nombre));
+    cacheService.set('eventos_all', data, 60000, ['eventos']);
+    return data;
+  }
+
+  getEventoById(id: string): Evento | undefined {
+    return this.getEventos().find((e) => e.id === id);
+  }
+
+  getEventoTalleres(eventoId?: string): EventoTaller[] {
+    const data = this.read<EventoTaller[]>(STORAGE_KEYS.EVENTO_TALLERES, []);
+    return eventoId ? data.filter((t) => t.evento_id === eventoId) : data;
+  }
+
+  getParticipantesEvento(eventoId?: string): EventoParticipante[] {
+    const data = this.read<EventoParticipante[]>(STORAGE_KEYS.EVENTO_PARTICIPANTES, []);
+    return eventoId ? data.filter((p) => p.evento_id === eventoId) : data;
+  }
+
+  private exigirAdmin(accion: string): void {
+    if (this.perfilActual?.rol !== 'ADMIN') throw new Error(`Solo un Administrador puede ${accion}.`);
+  }
+
+  private validarDatosEvento(datos: { nombre: string; fecha: string }): void {
+    if (!datos.nombre.trim()) throw new Error('Escribe el nombre del evento.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fecha)) throw new Error('Indica la fecha del evento.');
+  }
+
+  private notificarEventos(): void {
+    cacheService.invalidateByTag('eventos');
+    notifyDataChange();
+  }
+
+  /** Crea un evento con sus talleres participantes (solo ADMIN) */
+  crearEvento(
+    datos: { nombre: string; fecha: string; lugar?: string; descripcion?: string },
+    grupoIds: string[]
+  ): Evento {
+    this.exigirAdmin('crear eventos');
+    this.validarDatosEvento(datos);
+    const evento: Evento = {
+      id: `evt-${nuevoId()}`,
+      nombre: datos.nombre.trim(),
+      fecha: datos.fecha,
+      lugar: datos.lugar?.trim() || null,
+      descripcion: datos.descripcion?.trim() || null,
+      estado: 'ABIERTO',
+      creado_por: this.perfilActual?.id ?? null,
+      creado_en: new Date().toISOString(),
+    };
+    this.write(STORAGE_KEYS.EVENTOS, [...this.read<Evento[]>(STORAGE_KEYS.EVENTOS, []), evento]);
+    this.sincronizarTalleresEvento(evento.id, grupoIds);
+    this.notificarEventos();
+    return evento;
+  }
+
+  /**
+   * Actualiza datos y talleres de un evento (solo ADMIN). Quitar un taller quita también
+   * a sus participantes en el evento; `participantesAfectados` permite avisarlo antes.
+   */
+  actualizarEvento(
+    id: string,
+    datos: { nombre: string; fecha: string; lugar?: string; descripcion?: string },
+    grupoIds: string[]
+  ): Evento {
+    this.exigirAdmin('editar eventos');
+    this.validarDatosEvento(datos);
+    const lista = this.read<Evento[]>(STORAGE_KEYS.EVENTOS, []);
+    const index = lista.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error('Evento no encontrado.');
+    lista[index] = {
+      ...lista[index],
+      nombre: datos.nombre.trim(),
+      fecha: datos.fecha,
+      lugar: datos.lugar?.trim() || null,
+      descripcion: datos.descripcion?.trim() || null,
+    };
+    this.write(STORAGE_KEYS.EVENTOS, lista);
+    this.sincronizarTalleresEvento(id, grupoIds);
+    this.notificarEventos();
+    return lista[index];
+  }
+
+  /** Participantes que se perderían al quitar talleres de un evento */
+  participantesAfectados(eventoId: string, grupoIds: string[]): number {
+    const quedan = new Set(grupoIds);
+    return this.getParticipantesEvento(eventoId).filter((p) => !quedan.has(p.grupo_id)).length;
+  }
+
+  private sincronizarTalleresEvento(eventoId: string, grupoIds: string[]): void {
+    const deseados = new Set(grupoIds.filter((g) => this.getGrupoById(g)));
+    const actuales = this.getEventoTalleres(eventoId);
+    const quitar = actuales.filter((t) => !deseados.has(t.grupo_id));
+    if (quitar.length > 0) {
+      const grupos = new Set(quitar.map((t) => t.grupo_id));
+      const participantes = this.getParticipantesEvento(eventoId).filter((p) => grupos.has(p.grupo_id));
+      if (participantes.length > 0) this.remove(STORAGE_KEYS.EVENTO_PARTICIPANTES, participantes.map((p) => p.id));
+      this.remove(STORAGE_KEYS.EVENTO_TALLERES, quitar.map((t) => t.id));
+    }
+    const existentes = new Set(actuales.map((t) => t.grupo_id));
+    const nuevos = [...deseados]
+      .filter((g) => !existentes.has(g))
+      .map((grupo_id) => ({ id: `evt-tal-${nuevoId()}`, evento_id: eventoId, grupo_id }));
+    if (nuevos.length > 0) {
+      this.write(STORAGE_KEYS.EVENTO_TALLERES, [...this.read<EventoTaller[]>(STORAGE_KEYS.EVENTO_TALLERES, []), ...nuevos]);
+    }
+  }
+
+  /** Cierra (bloquea la lista para los docentes) o reabre un evento (solo ADMIN) */
+  cambiarEstadoEvento(id: string, estado: Evento['estado']): Evento {
+    this.exigirAdmin(estado === 'CERRADO' ? 'cerrar eventos' : 'reabrir eventos');
+    const lista = this.read<Evento[]>(STORAGE_KEYS.EVENTOS, []);
+    const index = lista.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error('Evento no encontrado.');
+    lista[index] = { ...lista[index], estado };
+    this.write(STORAGE_KEYS.EVENTOS, lista);
+    this.notificarEventos();
+    return lista[index];
+  }
+
+  /** Elimina un evento con sus talleres y participantes (solo ADMIN) */
+  eliminarEvento(id: string): void {
+    this.exigirAdmin('eliminar eventos');
+    const participantes = this.getParticipantesEvento(id).map((p) => p.id);
+    if (participantes.length > 0) this.remove(STORAGE_KEYS.EVENTO_PARTICIPANTES, participantes);
+    const talleres = this.getEventoTalleres(id).map((t) => t.id);
+    if (talleres.length > 0) this.remove(STORAGE_KEYS.EVENTO_TALLERES, talleres);
+    this.remove(STORAGE_KEYS.EVENTOS, [id]);
+    this.notificarEventos();
+  }
+
+  /** ¿Puede el perfil actual elegir alumnos de este taller en este evento? */
+  puedeElegirParticipantes(eventoId: string, grupoId: string): { puede: boolean; motivo?: string } {
+    const evento = this.getEventoById(eventoId);
+    const grupo = this.getGrupoById(grupoId);
+    const rol = this.perfilActual?.rol;
+    if (!evento || !grupo) return { puede: false, motivo: 'Evento o taller no encontrado.' };
+    if (!this.getEventoTalleres(eventoId).some((t) => t.grupo_id === grupoId)) {
+      return { puede: false, motivo: 'El taller no está asignado a este evento.' };
+    }
+    if (rol === 'ADMIN') return { puede: true };
+    if (rol !== 'PROFESOR' || grupo.profesor_id !== this.perfilActual?.id) {
+      return { puede: false, motivo: 'Solo el docente del taller o un Administrador eligen a sus participantes.' };
+    }
+    if (evento.estado !== 'ABIERTO') return { puede: false, motivo: 'El evento está cerrado.' };
+    return { puede: true };
+  }
+
+  /**
+   * Guarda los alumnos de un taller que participan en un evento (agrega los marcados y quita los
+   * desmarcados). Solo alumnos inscritos en ese taller y que no están de baja.
+   */
+  guardarParticipantes(eventoId: string, grupoId: string, estudianteIds: string[]): { agregados: number; quitados: number } {
+    const permiso = this.puedeElegirParticipantes(eventoId, grupoId);
+    if (!permiso.puede) throw new Error(permiso.motivo);
+
+    const inscritos = new Set(
+      this.getEstudiantesByGrupo(grupoId)
+        .filter((e) => e.estado !== 'BAJA')
+        .map((e) => e.id)
+    );
+    const fuera = estudianteIds.filter((id) => !inscritos.has(id));
+    if (fuera.length > 0) throw new Error('Solo se pueden elegir alumnos activos inscritos en el taller.');
+
+    const deseados = new Set(estudianteIds);
+    const actuales = this.getParticipantesEvento(eventoId).filter((p) => p.grupo_id === grupoId);
+    const quitar = actuales.filter((p) => !deseados.has(p.estudiante_id)).map((p) => p.id);
+    const yaEstan = new Set(actuales.map((p) => p.estudiante_id));
+    const ahora = new Date().toISOString();
+    const nuevos: EventoParticipante[] = [...deseados]
+      .filter((id) => !yaEstan.has(id))
+      .map((estudiante_id) => ({
+        id: `evt-par-${nuevoId()}`,
+        evento_id: eventoId,
+        grupo_id: grupoId,
+        estudiante_id,
+        registrado_por: this.perfilActual?.id ?? null,
+        creado_en: ahora,
+      }));
+
+    if (quitar.length > 0) this.remove(STORAGE_KEYS.EVENTO_PARTICIPANTES, quitar);
+    if (nuevos.length > 0) {
+      this.write(STORAGE_KEYS.EVENTO_PARTICIPANTES, [
+        ...this.read<EventoParticipante[]>(STORAGE_KEYS.EVENTO_PARTICIPANTES, []),
+        ...nuevos,
+      ]);
+    }
+    this.notificarEventos();
+    return { agregados: nuevos.length, quitados: quitar.length };
+  }
+
+  /**
+   * Lista consolidada de un evento: una fila por participante, ordenada por grado (orden del
+   * catálogo), sección (aula regular), apellido y nombre. `gruposPermitidos` limita los talleres.
+   */
+  filasEvento(eventoId: string, gruposPermitidos?: string[]): FilaParticipanteEvento[] {
+    const permitidos = gruposPermitidos ? new Set(gruposPermitidos) : null;
+    const estudiantes = new Map(this.getEstudiantes().map((e) => [e.id, e]));
+    const grupos = new Map(this.getGrupos().map((g) => [g.id, g]));
+    const perfiles = new Map(this.getPerfiles().map((p) => [p.id, `${p.nombre} ${p.apellido || ''}`.trim()]));
+    const catalogo = this.getGrados();
+    const ordenGrados = (catalogo.length > 0 ? catalogo.map((g) => g.nombre) : [...GRADOS_ESCOLARES]).map((g) =>
+      g.toLowerCase()
+    );
+    const posGrado = (g: string) => {
+      const i = ordenGrados.indexOf(g.trim().toLowerCase());
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+
+    return this.getParticipantesEvento(eventoId)
+      .filter((p) => !permitidos || permitidos.has(p.grupo_id))
+      .map((p) => {
+        const e = estudiantes.get(p.estudiante_id);
+        const g = grupos.get(p.grupo_id);
+        return {
+          participante_id: p.id,
+          estudiante_id: p.estudiante_id,
+          grado: e?.grado || 'Sin grado',
+          seccion: e?.aula_regular || 'Sin sección',
+          apellido: e?.apellido ?? '',
+          nombre: e?.nombre ?? 'Alumno eliminado',
+          matricula: e?.matricula ?? '',
+          grupo_id: p.grupo_id,
+          taller: g?.nombre ?? 'Taller eliminado',
+          docente: (g && perfiles.get(g.profesor_id)) || 'Sin docente',
+        };
+      })
+      .sort(
+        (a, b) =>
+          posGrado(a.grado) - posGrado(b.grado) ||
+          compararTexto(a.grado, b.grado) ||
+          compararTexto(a.seccion, b.seccion) ||
+          compararTexto(a.apellido, b.apellido) ||
+          compararTexto(a.nombre, b.nombre) ||
+          compararTexto(a.taller, b.taller)
+      );
   }
 
   // --- CORTES BIMESTRALES (ADMIN define fechas; ADMIN y CAJERO ven el reporte) ---
