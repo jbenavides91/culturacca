@@ -8,6 +8,7 @@ import {
   FileCheck2,
   Pencil,
   UserMinus,
+  ArrowRightLeft,
   UserCheck,
   RefreshCw,
   FileText,
@@ -36,6 +37,7 @@ import {
 } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { NewEnrollmentWizardModal } from '../enrollment/NewEnrollmentWizardModal';
+import { CambiarTallerModal } from './CambiarTallerModal';
 import { DigitalSignaturePad } from '../../components/DigitalSignaturePad';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
 
@@ -68,6 +70,8 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
   // Anecdotario (solo ADMIN en este módulo)
   const [anecdotarioStudent, setAnecdotarioStudent] = useState<Estudiante | null>(null);
+  // Cambio de taller (solo ADMIN)
+  const [cambioTallerStudent, setCambioTallerStudent] = useState<Estudiante | null>(null);
   const [conteoAnotaciones, setConteoAnotaciones] = useState<Map<string, number>>(new Map());
 
   // Edit Student state
@@ -774,6 +778,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
 
+                          {/* Cambiar de taller (solo ADMIN, si cursa al menos uno) */}
+                          {currentProfile.rol === 'ADMIN' && storageService.getGruposByEstudiante(est.id).length > 0 && (
+                            <button
+                              onClick={() => setCambioTallerStudent(est)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Cambiar de taller"
+                              aria-label={`Cambiar de taller a ${est.nombre} ${est.apellido}`}
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           {/* Renovar Contrato / Pago Anual con Firma */}
                           <button
                             onClick={() => handleOpenRenovarModal(est)}
@@ -1430,6 +1446,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       )}
 
       {/* Anecdotario del estudiante */}
+      {cambioTallerStudent && (
+        <CambiarTallerModal
+          estudiante={cambioTallerStudent}
+          onClose={() => setCambioTallerStudent(null)}
+          onCambiado={(mensaje) => {
+            setCambioTallerStudent(null);
+            setToastMessage(mensaje);
+            loadData();
+          }}
+        />
+      )}
+
       {anecdotarioStudent && (
         <AnecdotarioModal
           estudiante={anecdotarioStudent}

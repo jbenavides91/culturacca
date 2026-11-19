@@ -126,8 +126,10 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
     const existing = storageService.getEstudiantes().find(
       (e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase()
     );
-    if (!existing) return { tieneConflicto: false };
-    return storageService.verificarConflictoHorario(existing.id, selectedGrupo);
+    // Inscritos y solicitudes en Caja del mismo código (también si el alumno aún no existe)
+    return storageService.verificarConflictoHorario(existing?.id ?? null, selectedGrupo, {
+      codigoAlumno: codigoAlumno.trim().toUpperCase(),
+    });
   }, [selectedGrupo, codigoAlumno]);
 
   // Generated Contract Text
@@ -615,8 +617,30 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   const existing = storageService.getEstudiantes().find(
                     (e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase()
                   );
-                  if (existing) {
-                    const c = storageService.verificarConflictoHorario(existing.id, grupo);
+                  const codigoNorm = codigoAlumno.trim().toUpperCase();
+                  const yaInscrito =
+                    !!existing &&
+                    storageService.getInscripciones().some((i) => i.estudiante_id === existing.id && i.grupo_id === grupo.id);
+                  const solicitudPrevia = codigoNorm
+                    ? storageService
+                        .getSolicitudesMatricula()
+                        .find(
+                          (sol) =>
+                            sol.grupo_id === grupo.id &&
+                            (sol.estado === 'PENDIENTE_CAJA' || sol.estado === 'SOLVENTE') &&
+                            String(sol.codigo_alumno || '').trim().toUpperCase() === codigoNorm
+                        )
+                    : undefined;
+                  if (yaInscrito || solicitudPrevia) {
+                    hasConflict = true;
+                    conflictText = yaInscrito
+                      ? 'El alumno ya está inscrito en este taller.'
+                      : `Ya tiene la solicitud ${solicitudPrevia?.codigo_solicitud} pendiente en Caja para este taller.`;
+                  } else if (codigoNorm) {
+                    // Varios talleres sí, sin choque de días y horas (inscritos y solicitudes en Caja)
+                    const c = storageService.verificarConflictoHorario(existing?.id ?? null, grupo, {
+                      codigoAlumno: codigoNorm,
+                    });
                     if (c.tieneConflicto) {
                       hasConflict = true;
                       conflictText = c.motivo || 'Colisión de horario';

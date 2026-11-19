@@ -761,24 +761,123 @@ class StorageService {
   /**
    * Verifica si un estudiante tiene conflicto de horario con alguno de los talleres en los que ya está inscrito
    */
+  /**
+   * Un alumno puede cursar varios talleres siempre que no choquen en días y horas.
+   * Compara el taller destino con los compromisos del alumno: talleres en los que está inscrito
+   * y talleres de sus solicitudes en Caja (PENDIENTE_CAJA / SOLVENTE, por código de alumno; sirve
+   * también para un alumno que aún no existe con `codigoAlumno`). `excluirGrupoIds` deja fuera
+   * talleres (p. ej. el que abandona en un cambio de taller).
+   */
   verificarConflictoHorario(
-    estudianteId: string,
-    targetGrupo: Grupo
-  ): { tieneConflicto: boolean; grupoConflictivo?: Grupo; motivo?: string } {
-    const talleresActuales = this.getGruposByEstudiante(estudianteId);
+    estudianteId: string | null,
+    targetGrupo: Grupo,
+    opciones: { codigoAlumno?: string; excluirGrupoIds?: string[] } = {}
+  ): { tieneConflicto: boolean; grupoConflictivo?: Grupo; motivo?: string; enCaja?: boolean } {
+    const excluidos = new Set([targetGrupo.id, ...(opciones.excluirGrupoIds ?? [])]);
+    const estudiante = estudianteId ? this.getEstudiantes().find((e) => e.id === estudianteId) : undefined;
+    const codigo = (opciones.codigoAlumno || estudiante?.matricula || '').trim().toUpperCase();
 
-    for (const taller of talleresActuales) {
+    const inscritos = estudianteId ? this.getGruposByEstudiante(estudianteId) : [];
+    for (const taller of inscritos) {
+      if (excluidos.has(taller.id)) continue;
       const check = this.sonTalleresEnConflicto(targetGrupo, taller);
       if (check.tieneConflicto) {
-        return {
-          tieneConflicto: true,
-          grupoConflictivo: taller,
-          motivo: check.motivo,
-        };
+        return { tieneConflicto: true, grupoConflictivo: taller, motivo: check.motivo };
+      }
+    }
+
+    if (codigo) {
+      const idsInscritos = new Set(inscritos.map((g) => g.id));
+      const enCaja = this.getSolicitudesMatricula().filter(
+        (sol) =>
+          (sol.estado === 'PENDIENTE_CAJA' || sol.estado === 'SOLVENTE') &&
+          String(sol.codigo_alumno || '').trim().toUpperCase() === codigo &&
+          !excluidos.has(sol.grupo_id) &&
+          !idsInscritos.has(sol.grupo_id)
+      );
+      for (const sol of enCaja) {
+        const taller = this.getGrupoById(sol.grupo_id);
+        if (!taller) continue;
+        const check = this.sonTalleresEnConflicto(targetGrupo, taller);
+        if (check.tieneConflicto) {
+          return {
+            tieneConflicto: true,
+            grupoConflictivo: taller,
+            enCaja: true,
+            motivo: `Tiene una solicitud pendiente en Caja (${sol.codigo_solicitud}) para "${taller.nombre}", que coincide en días y horas.`,
+          };
+        }
       }
     }
 
     return { tieneConflicto: false };
+  }
+
+  /** Talleres a los que se puede cambiar un alumno desde `origenId`, con el motivo si no se puede */
+  opcionesCambioDeTaller(
+    estudianteId: string,
+    origenId: string
+  ): { grupo: Grupo; ocupacion: OcupacionTaller; disponible: boolean; motivo?: string }[] {
+    const inscritos = new Set(this.getGruposByEstudiante(estudianteId).map((g) => g.id));
+    return this.getGrupos()
+      .filter((g) => g.id !== origenId)
+      .map((grupo) => {
+        const ocupacion = this.ocupacionTaller(grupo.id, { excluirEstudianteId: estudianteId });
+        let motivo: string | undefined;
+        if (inscritos.has(grupo.id)) motivo = 'Ya está inscrito en este taller';
+        else if (ocupacion.cupo !== null && ocupacion.ocupados >= ocupacion.cupo) {
+          motivo = `Taller lleno (${ocupacion.ocupados}/${ocupacion.cupo})`;
+        } else {
+          const c = this.verificarConflictoHorario(estudianteId, grupo, { excluirGrupoIds: [origenId] });
+          if (c.tieneConflicto) motivo = c.motivo || `Choca con "${c.grupoConflictivo?.nombre}"`;
+        }
+        return { grupo, ocupacion, disponible: !motivo, motivo };
+      });
+  }
+
+  /**
+   * Cambia a un alumno inscrito de un taller a otro (solo ADMIN). Valida solvencia, cupo del destino
+   * y choque de horario sin contar el taller que deja. El historial de asistencia del taller de origen
+   * se conserva; la bitácora registra la baja y el alta para el corte bimestral.
+   */
+  cambiarDeTaller(estudianteId: string, origenId: string, destinoId: string): { origen: Grupo; destino: Grupo } {
+    if (this.perfilActual?.rol !== 'ADMIN') {
+      throw new Error('Solo un Administrador puede cambiar a un alumno de taller.');
+    }
+    const estudiante = this.getEstudiantes().find((e) => e.id === estudianteId);
+    const origen = this.getGrupoById(origenId);
+    const destino = this.getGrupoById(destinoId);
+    if (!estudiante) throw new Error('Alumno no encontrado.');
+    if (!origen || !destino) throw new Error('Taller no encontrado.');
+    if (origenId === destinoId) throw new Error('Elige un taller distinto al actual.');
+
+    const inscripciones = this.getInscripciones();
+    const actual = inscripciones.filter((i) => i.estudiante_id === estudianteId && i.grupo_id === origenId);
+    if (actual.length === 0) throw new Error(`El alumno no está inscrito en "${origen.nombre}".`);
+
+    const opcion = this.opcionesCambioDeTaller(estudianteId, origenId).find((o) => o.grupo.id === destinoId);
+    if (!opcion?.disponible) throw new Error(opcion?.motivo || 'No se puede cambiar a ese taller.');
+    const solvencia = this.estadoSolvencia(estudiante);
+    if (!solvencia.solvente) throw new Error(`No se puede cambiar de taller: ${solvencia.motivo}.`);
+
+    this.remove(STORAGE_KEYS.INSCRIPCIONES, actual.map((i) => i.id));
+    this.registrarMovimiento('BAJA_TALLER', estudianteId, origenId, `Cambio a "${destino.nombre}"`);
+
+    const restantes = this.getInscripciones();
+    restantes.push({
+      id: `ins-${nuevoId()}`,
+      grupo_id: destinoId,
+      estudiante_id: estudianteId,
+      fecha_inscripcion: fechaLocalISO(),
+    });
+    this.write(STORAGE_KEYS.INSCRIPCIONES, restantes);
+    this.registrarMovimiento('ALTA_TALLER', estudianteId, destinoId, `Cambio desde "${origen.nombre}"`);
+
+    cacheService.invalidateByTag('estudiantes');
+    cacheService.invalidateByTag('inscripciones');
+    cacheService.invalidateByTag('alertas');
+    notifyDataChange();
+    return { origen, destino };
   }
 
   /**
@@ -2578,13 +2677,29 @@ class StorageService {
       );
     }
 
-    if (existingStudent) {
-      const conflicto = this.verificarConflictoHorario(existingStudent.id, grupo);
-      if (conflicto.tieneConflicto) {
-        throw new Error(
-          `Conflicto de horario: El alumno ${existingStudent.nombre} ${existingStudent.apellido} ya cursa "${conflicto.grupoConflictivo?.nombre}" que coincide en días y horarios con este taller. ${conflicto.motivo}`
-        );
-      }
+    // Sin duplicados: ya inscrito o con una solicitud en Caja para el mismo taller
+    const codigoNuevo = datos.codigo_alumno.trim().toUpperCase();
+    if (existingStudent && this.getInscripciones().some((i) => i.estudiante_id === existingStudent.id && i.grupo_id === grupo.id)) {
+      throw new Error(`El alumno ya está inscrito en "${grupo.nombre}".`);
+    }
+    const duplicada = this.getSolicitudesMatricula().find(
+      (sol) =>
+        sol.grupo_id === grupo.id &&
+        (sol.estado === 'PENDIENTE_CAJA' || sol.estado === 'SOLVENTE') &&
+        String(sol.codigo_alumno || '').trim().toUpperCase() === codigoNuevo
+    );
+    if (duplicada) {
+      throw new Error(`Ya existe la solicitud ${duplicada.codigo_solicitud} pendiente en Caja para "${grupo.nombre}".`);
+    }
+
+    // Varios talleres sí, pero sin choque de días y horas (inscritos y solicitudes en Caja)
+    const conflicto = this.verificarConflictoHorario(existingStudent?.id ?? null, grupo, { codigoAlumno: codigoNuevo });
+    if (conflicto.tieneConflicto) {
+      throw new Error(
+        conflicto.enCaja
+          ? `Conflicto de horario: ${conflicto.motivo}`
+          : `Conflicto de horario: el alumno ya cursa "${conflicto.grupoConflictivo?.nombre}", que coincide en días y horas con este taller. ${conflicto.motivo}`
+      );
     }
 
     const count = this.getSolicitudesMatricula().length + 1;

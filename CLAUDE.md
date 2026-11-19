@@ -143,6 +143,25 @@ How it is enforced:
 - In Estudiantes → Editar, only ADMIN and CAJERO can change "Estado Pago Anual". For other roles, the select is disabled, a pending renewal's `estado` is kept, and the current payment values are preserved on save.
 - This is enforced in the UI and service only: RLS still lets MATRICULA write `estudiantes`.
 
+**Several workshops per student, no schedule clash**: a student may be in any number of workshops as long as they do not overlap in weekdays and hours (`sonTalleresEnConflicto`).
+
+`verificarConflictoHorario(estudianteId | null, grupo, { codigoAlumno?, excluirGrupoIds? })` compares the target workshop with the student's **commitments**:
+- the workshops they are enrolled in;
+- the workshops of their requests in `PENDIENTE_CAJA` / `SOLVENTE`, matched by `codigo_alumno`. Pass `codigoAlumno` for a student who does not exist yet.
+
+It skips the target and `excluirGrupoIds`. It returns `enCaja: true` when the clash is with a pending request.
+
+Callers:
+- `inscribirEstudianteEnGrupo`, Talleres → Alumnos (shows "Ocupado" with the reason) and the enrollment wizard. The wizard's cards also block a workshop the student is already enrolled in or already has a pending request for.
+- `crearSolicitudMatricula` rejects clashes for new and existing students, plus **duplicates** (already enrolled, or already pending in Caja, in the same workshop).
+
+**Cambiar de taller** (ADMIN only; the `ArrowRightLeft` button in Estudiantes, shown when the student has at least one workshop):
+- `CambiarTallerModal` lists `opcionesCambioDeTaller(estudianteId, origenId)`: every other workshop with its `CupoBadge`, and when unavailable, the reason (already enrolled, full, or a clash that ignores the source workshop).
+- `cambiarDeTaller(estudianteId, origenId, destinoId)` checks the `perfilActual` role, solvency, the destination's capacity and the clash, then:
+  - removes the source enrollment and inserts the destination one;
+  - logs `BAJA_TALLER` ("Cambio a …") and `ALTA_TALLER` ("Cambio desde …") in `movimientos_inscripcion`, so the cut report counts it.
+- The source workshop's attendance and notes are kept.
+
 **Workshop capacity (cupo)**:
 - `grupos.cupo_maximo` (migration `0014`; integer > 0, nullable) is **required** in the Talleres create and edit forms. Choosing a catalogued room with `capacidad` pre-fills it when it is empty.
 - `crearGrupoConSesiones` validates the capacity. `actualizarGrupo` validates it only when `cupo_maximo` is in the patch, so `asignarTallerADocente` keeps working for legacy workshops. Editing refuses a capacity lower than the students already enrolled.
