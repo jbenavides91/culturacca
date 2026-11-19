@@ -20,6 +20,7 @@ import {
   PenTool,
   Check,
   NotebookPen,
+  Trash2,
 } from 'lucide-react';
 import { AnecdotarioModal } from './AnecdotarioModal';
 import { arancelDeGrupo } from '../../utils/arancel';
@@ -38,6 +39,7 @@ import {
 import { storageService, subscribeToData } from '../../services/storage.service';
 import { NewEnrollmentWizardModal } from '../enrollment/NewEnrollmentWizardModal';
 import { CambiarTallerModal } from './CambiarTallerModal';
+import { EliminarEstudianteModal } from './EliminarEstudianteModal';
 import { DigitalSignaturePad } from '../../components/DigitalSignaturePad';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
 
@@ -72,6 +74,8 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [anecdotarioStudent, setAnecdotarioStudent] = useState<Estudiante | null>(null);
   // Cambio de taller (solo ADMIN)
   const [cambioTallerStudent, setCambioTallerStudent] = useState<Estudiante | null>(null);
+  // Eliminación definitiva (solo ADMIN)
+  const [studentToEliminar, setStudentToEliminar] = useState<Estudiante | null>(null);
   const [conteoAnotaciones, setConteoAnotaciones] = useState<Map<string, number>>(new Map());
 
   // Edit Student state
@@ -818,6 +822,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                               <UserMinus className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          {/* Eliminar definitivamente (solo ADMIN) */}
+                          {currentProfile.rol === 'ADMIN' && (
+                            <button
+                              onClick={() => setStudentToEliminar(est)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                              title="Eliminar alumno definitivamente"
+                              aria-label={`Eliminar a ${est.nombre} ${est.apellido}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -828,6 +844,19 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* MODAL: ELIMINAR ALUMNO (solo ADMIN) */}
+      {studentToEliminar && currentProfile.rol === 'ADMIN' && (
+        <EliminarEstudianteModal
+          estudiante={studentToEliminar}
+          onClose={() => setStudentToEliminar(null)}
+          onEliminado={(mensaje) => {
+            setStudentToEliminar(null);
+            setToastMessage(mensaje);
+            loadData();
+          }}
+        />
+      )}
 
       {/* MODAL: DAR DE BAJA TEMPORAL */}
       {studentToBaja && (

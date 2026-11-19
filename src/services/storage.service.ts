@@ -1114,6 +1114,99 @@ class StorageService {
     return actualizado;
   }
 
+  /** Solicitudes de matrícula de un alumno (por id o por su código de alumno) */
+  private solicitudesDeEstudiante(est: Estudiante): SolicitudMatricula[] {
+    const codigo = est.matricula.trim().toUpperCase();
+    return this.read<SolicitudMatricula[]>(STORAGE_KEYS.MATRICULAS, []).filter(
+      (m) =>
+        m.estudiante_id === est.id ||
+        m.estudiante_id_creado === est.id ||
+        (!!codigo && String(m.codigo_alumno || '').trim().toUpperCase() === codigo)
+    );
+  }
+
+  /** Qué se borraría al eliminar un alumno (solo lectura, para el diálogo de confirmación) */
+  resumenEliminacionEstudiante(id: string): {
+    talleres: string[];
+    asistencias: number;
+    anotaciones: number;
+    solicitudes: number;
+    solicitudesCobradas: number;
+    participacionesEventos: number;
+    tutorNombre: string | null;
+    tutorCompartido: boolean;
+  } {
+    const est = this.getEstudiantes().find((e) => e.id === id);
+    if (!est) throw new Error('Alumno no encontrado.');
+    const solicitudes = this.solicitudesDeEstudiante(est);
+    const tutor = est.tutor_id ? this.getTutorById(est.tutor_id) : undefined;
+    return {
+      talleres: this.getGruposByEstudiante(id).map((g) => g.nombre),
+      asistencias: this.getAsistencias().filter((a) => a.estudiante_id === id).length,
+      anotaciones: this.read<Anotacion[]>(STORAGE_KEYS.ANECDOTARIO, []).filter((n) => n.estudiante_id === id).length,
+      solicitudes: solicitudes.length,
+      solicitudesCobradas: solicitudes.filter((m) => m.solvente || m.estado === 'SOLVENTE' || m.estado === 'ACEPTADA').length,
+      participacionesEventos: this.getParticipantesEvento().filter((p) => p.estudiante_id === id).length,
+      tutorNombre: tutor?.nombre ?? null,
+      tutorCompartido: !!tutor && this.getEstudiantes().some((e) => e.id !== id && e.tutor_id === tutor.id),
+    };
+  }
+
+  /**
+   * Elimina definitivamente a un alumno (solo ADMIN; la RLS de 0016 también lo exige).
+   * Borra su asistencia, anecdotario, participaciones en eventos, inscripciones y todas sus
+   * solicitudes de matrícula (también las cobradas), y su tutor si nadie más lo usa.
+   * La bitácora de movimientos (insert-only) y el log de notificaciones se conservan; antes de
+   * borrar se registra la baja de cada taller para que el Corte bimestral cierre sus periodos.
+   * Se borra de hijo a padre para que la memoria quede coherente sin esperar a la cascada.
+   */
+  eliminarEstudiante(id: string): { nombre: string; tutorEliminado: boolean } & ReturnType<
+    StorageService['resumenEliminacionEstudiante']
+  > {
+    this.exigirAdmin('eliminar alumnos');
+    const est = this.getEstudiantes().find((e) => e.id === id);
+    if (!est) throw new Error('Alumno no encontrado.');
+    const resumen = this.resumenEliminacionEstudiante(id);
+
+    const inscripciones = this.getInscripciones().filter((i) => i.estudiante_id === id);
+    inscripciones.forEach((i) => this.registrarMovimiento('BAJA_TALLER', id, i.grupo_id, 'Alumno eliminado'));
+
+    const quitar = (key: StorageKey, ids: string[]) => {
+      if (ids.length > 0) this.remove(key, ids);
+    };
+    quitar(STORAGE_KEYS.ASISTENCIAS, this.getAsistencias().filter((a) => a.estudiante_id === id).map((a) => a.id));
+    quitar(
+      STORAGE_KEYS.ANECDOTARIO,
+      this.read<Anotacion[]>(STORAGE_KEYS.ANECDOTARIO, []).filter((n) => n.estudiante_id === id).map((n) => n.id)
+    );
+    quitar(
+      STORAGE_KEYS.EVENTO_PARTICIPANTES,
+      this.getParticipantesEvento().filter((p) => p.estudiante_id === id).map((p) => p.id)
+    );
+    quitar(STORAGE_KEYS.INSCRIPCIONES, inscripciones.map((i) => i.id));
+    quitar(STORAGE_KEYS.MATRICULAS, this.solicitudesDeEstudiante(est).map((m) => m.id));
+    this.remove(STORAGE_KEYS.ESTUDIANTES, [id]);
+
+    const tutorEliminado = !!est.tutor_id && !!resumen.tutorNombre && !resumen.tutorCompartido;
+    if (tutorEliminado) this.remove(STORAGE_KEYS.TUTORES, [est.tutor_id]);
+
+    [
+      'estudiantes',
+      'inscripciones',
+      'asistencias',
+      'alertas',
+      'anecdotario',
+      'matriculas',
+      'tutores',
+      'eventos',
+      'movimientos',
+      'cortes',
+    ].forEach((tag) => cacheService.invalidateByTag(tag));
+    notifyDataChange();
+
+    return { nombre: `${est.nombre} ${est.apellido}`.trim(), tutorEliminado, ...resumen };
+  }
+
   /**
    * Reactiva o reincorpora a un alumno que estaba de baja para que vuelva a cursos
    */
