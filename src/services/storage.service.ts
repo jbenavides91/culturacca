@@ -689,7 +689,22 @@ class StorageService {
   }
 
   /**
-   * Inscribe un estudiante a un taller validando que no tenga colisión de horario
+   * Solvencia en Caja: un alumno solo se inscribe en talleres cuando Caja confirmó su pago.
+   * AL_DIA y EXENTO (beca) son solventes; una renovación sin pagar o un pago pendiente no.
+   */
+  estadoSolvencia(est: Estudiante): { solvente: boolean; motivo?: string } {
+    if (est.estado === 'PENDIENTE_RENOVACION') {
+      return { solvente: false, motivo: 'Renovación pendiente de pago en Caja' };
+    }
+    if (est.estado_pago_anual === 'EXENTO') return { solvente: true };
+    if (est.estado_pago_anual === 'PENDIENTE' || est.solvente === false) {
+      return { solvente: false, motivo: 'Pendiente de pago en Caja' };
+    }
+    return { solvente: true };
+  }
+
+  /**
+   * Inscribe un estudiante a un taller validando que esté solvente y no tenga colisión de horario
    */
   inscribirEstudianteEnGrupo(
     estudianteId: string,
@@ -706,6 +721,16 @@ class StorageService {
     );
     if (yaInscrito) {
       return { success: true };
+    }
+
+    // Solo se inscribe a alumnos solventes: Caja debe haber confirmado el pago
+    const estudiante = this.getEstudiantes().find((e) => e.id === estudianteId);
+    if (!estudiante) {
+      return { success: false, error: 'Alumno no encontrado' };
+    }
+    const solvencia = this.estadoSolvencia(estudiante);
+    if (!solvencia.solvente) {
+      return { success: false, error: solvencia.motivo };
     }
 
     // Validar conflicto de horario
@@ -808,6 +833,12 @@ class StorageService {
     est: Omit<Estudiante, 'id' | 'creado_en'>,
     grupoId?: string
   ): Estudiante {
+    if (grupoId) {
+      const solvencia = this.estadoSolvencia(est as Estudiante);
+      if (!solvencia.solvente) {
+        throw new Error(`No se puede inscribir en el taller: ${solvencia.motivo}.`);
+      }
+    }
     const nuevo: Estudiante = {
       ...est,
       id: `est-${nuevoId()}`,
@@ -2579,6 +2610,53 @@ class StorageService {
     return { solicitud: nuevaSolicitud, estudiante: estudianteActualizado };
   }
 
+  /**
+   * Envía al correo del tutor el resumen de la solicitud y el contrato firmado en PDF
+   * (Edge Function `correo-matricula`, cuenta Gmail institucional). La función arma todo desde la
+   * base de datos, por eso primero se espera a que la solicitud termine de guardarse.
+   * Un fallo nunca deshace la solicitud: solo queda registrado en `correo_error`.
+   */
+  async enviarCorreoMatricula(
+    solicitudId: string
+  ): Promise<{ ok: boolean; destinatario?: string; error?: string }> {
+    await syncStore.flush();
+
+    const { data, error } = await supabase.functions.invoke<{
+      ok?: boolean;
+      destinatario?: string;
+      enviado_en?: string;
+      error?: string;
+    }>('correo-matricula', { body: { solicitud_id: solicitudId } });
+
+    let mensaje: string | undefined = data?.error;
+    if (error) {
+      mensaje = error.message;
+      const context = (error as { context?: unknown }).context;
+      if (context instanceof Response) {
+        try {
+          const payload = (await context.json()) as { error?: string };
+          if (payload?.error) mensaje = payload.error;
+        } catch {
+          // ignorar
+        }
+      }
+    }
+
+    // Reflejar el resultado en memoria (la función ya lo escribió en la base de datos)
+    const actual = this.getSolicitudMatriculaById(solicitudId);
+    if (actual) {
+      const patch = mensaje
+        ? { correo_error: mensaje }
+        : { correo_enviado_en: data?.enviado_en || new Date().toISOString(), correo_error: null };
+      syncStore.applyRemote(STORAGE_KEYS.MATRICULAS, { ...actual, ...patch } as unknown as Record<string, unknown>);
+      cacheService.invalidateByTag('matriculas');
+      notifyDataChange();
+    }
+
+    if (mensaje) return { ok: false, error: mensaje };
+    return { ok: true, destinatario: data?.destinatario };
+  }
+
   validarChecklistCaja(
     id: string,
     validadoDatos: boolean,
@@ -2848,6 +2926,10 @@ class StorageService {
         solvente: true,
         numero_recibo_caja: solicitud.numero_recibo_caja,
         matricula_solicitud_id: solicitud.id,
+        // El pago ya está confirmado: queda activo y al día (también si tenía la renovación pendiente)
+        estado: estudiante.estado === 'BAJA' ? estudiante.estado : 'ACTIVO',
+        estado_pago_anual: 'AL_DIA',
+        contrato_vigente: true,
       };
       const estIndex = todosEstudiantes.findIndex((e) => e.id === estudiante?.id);
       if (estIndex !== -1) {

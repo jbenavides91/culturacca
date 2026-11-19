@@ -63,6 +63,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [solicitudes, setSolicitudes] = useState<SolicitudMatricula[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // La solvencia (pago anual) solo la cambian ADMIN y Caja: los demás roles no pueden volver solvente a un alumno
+  const puedeEditarPago = currentProfile.rol === 'ADMIN' || currentProfile.rol === 'CAJERO';
+
   // Anecdotario (solo ADMIN en este módulo)
   const [anecdotarioStudent, setAnecdotarioStudent] = useState<Estudiante | null>(null);
   const [conteoAnotaciones, setConteoAnotaciones] = useState<Map<string, number>>(new Map());
@@ -174,6 +177,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         }
       }
 
+      // Sin permiso de Caja se conservan el pago y la renovación pendiente tal como están
+      const conservarRenovacion = !puedeEditarPago && editingStudent.estado === 'PENDIENTE_RENOVACION';
+      const pago = puedeEditarPago
+        ? { estado_pago_anual: editEstadoPagoAnual, solvente: editEstadoPagoAnual !== 'PENDIENTE' }
+        : { estado_pago_anual: editingStudent.estado_pago_anual, solvente: editingStudent.solvente };
+
       storageService.actualizarEstudiante(editingStudent.id, {
         nombre: editNombre.trim(),
         apellido: editApellido.trim(),
@@ -181,11 +190,10 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         grado: editGrado,
         aula_regular: editAulaRegular.trim() || 'Aula Regular',
         tutor_id: resolvedTutorId,
-        estado: editEstado,
+        estado: conservarRenovacion ? 'PENDIENTE_RENOVACION' : editEstado,
         contrato_vigente: editContratoVigente,
-        estado_pago_anual: editEstadoPagoAnual,
         ciclo_actual: editCicloActual.trim() || '2026',
-        solvente: editEstadoPagoAnual === 'AL_DIA',
+        ...pago,
       });
 
       setToastMessage(`Estudiante ${editNombre.trim()} ${editApellido.trim()} actualizado correctamente.`);
@@ -362,6 +370,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       setToastMessage(
         `Trámite de renovación registrado (${res.solicitud.codigo_solicitud}). El expediente fue enviado a la Ventanilla de Caja para verificación de pago y alta oficial del alumno.`
       );
+
+      // Resumen y contrato firmado al tutor (solo si se indicó un correo real, no el de relleno)
+      if (renovacionTutorEmail.trim()) {
+        const codigo = res.solicitud.codigo_solicitud;
+        void storageService.enviarCorreoMatricula(res.solicitud.id).then((envio) =>
+          setToastMessage(
+            envio.ok
+              ? `Renovación ${codigo}: resumen y contrato enviados a ${envio.destinatario}.`
+              : `Renovación ${codigo} registrada, pero no se pudo enviar el correo al tutor: ${envio.error}`
+          )
+        );
+      }
 
       setStudentToRenovar(null);
       loadData();
@@ -1314,7 +1334,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     <select
                       value={editEstado}
                       onChange={(e) => setEditEstado(e.target.value as EstadoEstudiante)}
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      disabled={!puedeEditarPago && editingStudent.estado === 'PENDIENTE_RENOVACION'}
+                      title={
+                        !puedeEditarPago && editingStudent.estado === 'PENDIENTE_RENOVACION'
+                          ? 'La renovación se formaliza en Caja al registrar el pago'
+                          : undefined
+                      }
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="ACTIVO">Activo</option>
                       <option value="BAJA">Dado de Baja</option>
@@ -1343,12 +1369,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     <select
                       value={editEstadoPagoAnual}
                       onChange={(e) => setEditEstadoPagoAnual(e.target.value as EstadoPagoAnual)}
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      disabled={!puedeEditarPago}
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#141A23] p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="AL_DIA">Al Día / Solvente</option>
                       <option value="PENDIENTE">Pendiente en Caja</option>
                       <option value="EXENTO">Exento / Beca</option>
                     </select>
+                    {!puedeEditarPago && (
+                      <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                        Lo actualiza Caja al registrar el pago.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center pt-5">

@@ -16,6 +16,9 @@ import {
   Shield,
   Palette,
   Users,
+  Mail,
+  Loader2,
+  RotateCcw,
 } from 'lucide-react';
 import { Grupo, SolicitudMatricula } from '../../types/attendance';
 import { gradosDisponibles } from '../../utils/grados';
@@ -64,6 +67,18 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdSolicitud, setCreatedSolicitud] = useState<SolicitudMatricula | null>(null);
+  // Envío del resumen y contrato firmado al correo del tutor
+  const [correo, setCorreo] = useState<{ estado: 'enviando' | 'ok' | 'error'; mensaje?: string } | null>(null);
+
+  const enviarCorreoTutor = async (solicitudId: string) => {
+    setCorreo({ estado: 'enviando' });
+    try {
+      const res = await storageService.enviarCorreoMatricula(solicitudId);
+      setCorreo(res.ok ? { estado: 'ok', mensaje: res.destinatario } : { estado: 'error', mensaje: res.error });
+    } catch (err) {
+      setCorreo({ estado: 'error', mensaje: err instanceof Error ? err.message : 'No se pudo enviar el correo.' });
+    }
+  };
 
   // Available workshops
   const grupos = useMemo(() => storageService.getGrupos(), []);
@@ -222,6 +237,8 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       setCreatedSolicitud(nueva);
       setStep(4);
       onEnrollmentCreated?.(nueva);
+      // El correo no bloquea: la solicitud ya quedó registrada aunque el envío falle
+      void enviarCorreoTutor(nueva.id);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error al registrar la solicitud');
     } finally {
@@ -810,6 +827,56 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   <strong>Paso siguiente en Caja:</strong> El padre de familia debe presentarse a la ventanilla de Caja con el código <strong>{createdSolicitud.codigo_solicitud}</strong>. La chica de caja validará los datos y el contrato firmado, registrará el pago en el sistema contable y marcará al alumno como <strong>SOLVENTE</strong> para formalizar la matrícula.
                 </div>
               </div>
+
+              {/* Correo al tutor (resumen + contrato firmado en PDF) */}
+              {correo && (
+                <div
+                  className={`max-w-md mx-auto p-3 rounded-xl border text-xs text-left flex items-start gap-2.5 ${
+                    correo.estado === 'ok'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-200'
+                      : correo.estado === 'error'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200'
+                      : 'bg-slate-50 dark:bg-[#151A22] border-[#E7EAF0] dark:border-[#2B3442] text-[#667085] dark:text-[#94A3B8]'
+                  }`}
+                  role="status"
+                >
+                  {correo.estado === 'enviando' ? (
+                    <Loader2 className="w-4 h-4 shrink-0 mt-0.5 animate-spin" />
+                  ) : correo.estado === 'ok' ? (
+                    <Mail className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0 leading-relaxed">
+                    {correo.estado === 'enviando' && (
+                      <span>
+                        Enviando el resumen y el contrato firmado a <strong>{createdSolicitud.tutor_email}</strong>…
+                      </span>
+                    )}
+                    {correo.estado === 'ok' && (
+                      <span>
+                        Resumen y contrato firmado (PDF) enviados a <strong>{correo.mensaje || createdSolicitud.tutor_email}</strong>.
+                      </span>
+                    )}
+                    {correo.estado === 'error' && (
+                      <>
+                        <span className="block">
+                          No se pudo enviar el correo al tutor. La solicitud sí quedó registrada.
+                        </span>
+                        {correo.mensaje && <span className="block text-[11px] opacity-80 mt-0.5">{correo.mensaje}</span>}
+                        <button
+                          type="button"
+                          onClick={() => void enviarCorreoTutor(createdSolicitud.id)}
+                          className="mt-1.5 inline-flex items-center gap-1 font-semibold underline cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Reintentar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-center space-x-3 pt-2">

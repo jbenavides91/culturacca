@@ -107,7 +107,7 @@ export const TABLES: Record<StorageKey, TableDef> = {
       'tutor_parentesco', 'tutor_cedula', 'grupo_id', 'grupo_nombre', 'fecha_solicitud', 'contrato_texto',
       'contrato_firmado', 'firma_digital_url', 'fecha_firma', 'firmante_nombre', 'estado', 'validado_datos',
       'validado_contrato', 'solvente', 'numero_recibo_caja', 'monto_arancel', 'metodo_pago', 'cajero_nombre',
-      'cajero_observaciones', 'fecha_pago', 'fecha_aceptacion', 'estudiante_id_creado',
+      'cajero_observaciones', 'fecha_pago', 'fecha_aceptacion', 'estudiante_id_creado', 'correo_enviado_en', 'correo_error',
     ],
     tags: ['matriculas'],
   },

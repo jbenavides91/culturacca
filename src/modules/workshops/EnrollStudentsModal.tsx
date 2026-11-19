@@ -93,12 +93,17 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
       const conflictResult = storageService.verificarConflictoHorario(est.id, grupo);
       const tutor = tutores.find((t) => t.id === est.tutor_id);
+      const solvencia = storageService.estadoSolvencia(est);
 
       return {
         estudiante: est,
         tutor,
         isAlreadyInThisWorkshop,
         otherWorkshops,
+        pendientePago: !solvencia.solvente,
+        motivoPago: solvencia.motivo,
+        // Bloqueado: choque de horario, o sin pago confirmado en Caja y aún no inscrito
+        bloqueado: conflictResult.tieneConflicto || (!solvencia.solvente && !isAlreadyInThisWorkshop),
         hasConflict: conflictResult.tieneConflicto,
         conflictMotivo: conflictResult.motivo,
         conflictingGroup: conflictResult.grupoConflictivo,
@@ -171,7 +176,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
       }
 
       // 4. View filter (todos | disponibles | seleccionados | conflictos)
-      if (viewFilter === 'disponibles' && item.hasConflict) {
+      if (viewFilter === 'disponibles' && item.bloqueado) {
         return false;
       }
       if (viewFilter === 'conflictos' && !item.hasConflict) {
@@ -182,10 +187,10 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
       }
 
       // 5. Solvencia filter
-      if (solvenciaFilter === 'solvente' && !est.solvente) {
+      if (solvenciaFilter === 'solvente' && item.pendientePago) {
         return false;
       }
-      if (solvenciaFilter === 'pendiente' && est.solvente) {
+      if (solvenciaFilter === 'pendiente' && !item.pendientePago) {
         return false;
       }
 
@@ -209,11 +214,11 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
   // Overall counters
   const totalCount = studentEvaluations.length;
-  const availableCount = studentEvaluations.filter((i) => !i.hasConflict).length;
+  const availableCount = studentEvaluations.filter((i) => !i.bloqueado).length;
   const conflictCount = studentEvaluations.filter((i) => i.hasConflict).length;
   const currentSelectedCount = selectedIds.size;
 
-  const filteredAvailable = filteredEvaluations.filter((i) => !i.hasConflict);
+  const filteredAvailable = filteredEvaluations.filter((i) => !i.bloqueado);
   const filteredAvailableCount = filteredAvailable.length;
 
   const hasActiveFilters = Boolean(
@@ -232,13 +237,13 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
     setSolvenciaFilter('todos');
   };
 
-  const handleToggleStudent = (estudianteId: string, hasConflict: boolean) => {
-    if (hasConflict) return;
-
+  /** Siempre se puede desmarcar; marcar solo si no está bloqueado (horario o pago pendiente) */
+  const handleToggleStudent = (estudianteId: string, bloqueado: boolean) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(estudianteId)) {
       newSet.delete(estudianteId);
     } else {
+      if (bloqueado) return;
       newSet.add(estudianteId);
     }
     setSelectedIds(newSet);
@@ -274,7 +279,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
 
       if (result.errores.length > 0) {
         const errList = result.errores.map((e) => `• ${e.estudianteNombre}: ${e.motivo}`).join('\n');
-        setSaveError(`Alumnos no inscritos por conflicto de horario:\n${errList}`);
+        setSaveError(`Alumnos no inscritos:\n${errList}`);
       }
 
       onSaved?.(`Alumnos actualizados en "${grupo.nombre}" (${selectedIds.size} inscritos).`);
@@ -503,12 +508,12 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
           ) : (
             filteredEvaluations.map((item) => {
               const isSelected = selectedIds.has(item.estudiante.id);
-              const isDisabled = item.hasConflict;
+              const isDisabled = item.bloqueado && !isSelected;
 
               return (
                 <div
                   key={item.estudiante.id}
-                  onClick={() => !isDisabled && handleToggleStudent(item.estudiante.id, item.hasConflict)}
+                  onClick={() => !isDisabled && handleToggleStudent(item.estudiante.id, item.bloqueado)}
                   className={`px-6 py-3 transition-colors flex items-center justify-between gap-4 ${
                     isDisabled
                       ? 'opacity-60 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/20'
@@ -523,7 +528,7 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
                       type="checkbox"
                       checked={isSelected}
                       disabled={isDisabled}
-                      onChange={() => handleToggleStudent(item.estudiante.id, item.hasConflict)}
+                      onChange={() => handleToggleStudent(item.estudiante.id, item.bloqueado)}
                       className={`w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-0 ${
                         isDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
                       }`}
@@ -542,6 +547,14 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
                         {item.estudiante.estado === 'BAJA' && (
                           <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900">
                             Baja temporal
+                          </span>
+                        )}
+                        {item.pendientePago && (
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900"
+                            title={item.motivoPago}
+                          >
+                            Pago pendiente
                           </span>
                         )}
                         {item.estudiante.contrato_vigente === false && (
@@ -571,10 +584,21 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
                       </div>
 
                       {/* Conflict explanation inline if applicable */}
-                      {isDisabled && (
+                      {isDisabled && item.hasConflict && (
                         <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1 font-medium">
                           <AlertTriangle className="w-3 h-3 shrink-0" />
                           <span>{item.conflictMotivo}</span>
+                        </div>
+                      )}
+                      {item.pendientePago && !item.hasConflict && (
+                        <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-1 font-medium">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span>
+                            {item.motivoPago}
+                            {isSelected
+                              ? ': si lo desmarcas no podrás volver a inscribirlo hasta que Caja confirme el pago.'
+                              : ': se inscribe cuando Caja confirme el pago.'}
+                          </span>
                         </div>
                       )}
 
@@ -591,9 +615,11 @@ export const EnrollStudentsModal: React.FC<EnrollStudentsModalProps> = ({
                   {/* Right Side: Minimal quiet status */}
                   <div className="shrink-0 text-right">
                     {isDisabled ? (
-                      <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
-                        Ocupado
-                      </span>
+                      item.hasConflict ? (
+                        <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">Ocupado</span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">Sin pago</span>
+                      )
                     ) : isSelected ? (
                       <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />

@@ -388,4 +388,8 @@ export interface SolicitudMatricula {
   // Aceptación de Matrícula
   fecha_aceptacion?: string;
   estudiante_id_creado?: string;
+  /** Último envío correcto del resumen y contrato al tutor (lo escribe la Edge Function correo-matricula) */
+  correo_enviado_en?: string | null;
+  /** Error del último intento de envío; null si el último fue correcto */
+  correo_error?: string | null;
 }

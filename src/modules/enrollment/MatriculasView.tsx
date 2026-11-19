@@ -16,6 +16,9 @@ import {
   Calendar,
   Sparkles,
   Receipt,
+  Mail,
+  MailWarning,
+  Loader2,
 } from 'lucide-react';
 import { Perfil, SolicitudMatricula, Grupo } from '../../types/attendance';
 import { storageService, subscribeToData } from '../../services/storage.service';
@@ -48,6 +51,24 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
   const [selectedForContractView, setSelectedForContractView] = useState<SolicitudMatricula | null>(null);
   const [selectedForCertificate, setSelectedForCertificate] = useState<SolicitudMatricula | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [enviandoCorreoId, setEnviandoCorreoId] = useState<string | null>(null);
+
+  /** Reenvía al tutor el resumen y el contrato firmado (PDF) */
+  const reenviarCorreo = async (sol: SolicitudMatricula) => {
+    const accion = sol.correo_enviado_en ? 'Reenviar' : 'Enviar';
+    if (!window.confirm(`¿${accion} el resumen y el contrato firmado de ${sol.codigo_solicitud} a ${sol.tutor_email}?`)) return;
+    setEnviandoCorreoId(sol.id);
+    try {
+      const res = await storageService.enviarCorreoMatricula(sol.id);
+      setToastMessage(
+        res.ok
+          ? `Resumen y contrato de ${sol.codigo_solicitud} enviados a ${res.destinatario}.`
+          : `No se pudo enviar el correo de ${sol.codigo_solicitud}: ${res.error}`
+      );
+    } finally {
+      setEnviandoCorreoId(null);
+    }
+  };
 
   const loadData = () => {
     setSolicitudes(storageService.getSolicitudesMatricula());
@@ -490,6 +511,35 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
                     {/* Documentos */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1.5">
+                        {sol.contrato_firmado && sol.tutor_email && (
+                          <button
+                            onClick={() => void reenviarCorreo(sol)}
+                            disabled={enviandoCorreoId === sol.id}
+                            className={`p-1.5 rounded-lg border transition cursor-pointer disabled:cursor-wait ${
+                              sol.correo_error
+                                ? 'border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                                : sol.correo_enviado_en
+                                ? 'border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                : 'border-[#E7EAF0] dark:border-[#2B3442] text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                            title={
+                              sol.correo_error
+                                ? `Error al enviar el correo: ${sol.correo_error}. Clic para reintentar.`
+                                : sol.correo_enviado_en
+                                ? `Correo enviado a ${sol.tutor_email} el ${new Date(sol.correo_enviado_en).toLocaleString('es-ES')}. Clic para reenviar.`
+                                : `Correo no enviado. Clic para enviar el resumen y el contrato a ${sol.tutor_email}.`
+                            }
+                            aria-label="Enviar correo de matrícula al tutor"
+                          >
+                            {enviandoCorreoId === sol.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : sol.correo_error ? (
+                              <MailWarning className="w-3.5 h-3.5" />
+                            ) : (
+                              <Mail className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedForContractView(sol)}
                           className="p-1.5 rounded-lg border border-[#E7EAF0] dark:border-[#2B3442] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"

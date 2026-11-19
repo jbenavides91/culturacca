@@ -1057,6 +1057,14 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                                   Baja temporal
                                 </span>
                               )}
+                              {!storageService.estadoSolvencia(est).solvente && (
+                                <span
+                                  className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900"
+                                  title={storageService.estadoSolvencia(est).motivo}
+                                >
+                                  Pago pendiente
+                                </span>
+                              )}
                               {alerta?.nivel_alerta === 'CRITICA' && (
                                 <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">
                                   {alerta.total_ausencias} Faltas
@@ -1247,6 +1255,14 @@ export const RollCallView: React.FC<RollCallViewProps> = ({
                         {est.estado === 'BAJA' && (
                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 shrink-0">
                             Baja
+                          </span>
+                        )}
+                        {!storageService.estadoSolvencia(est).solvente && (
+                          <span
+                            className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900 shrink-0"
+                            title={storageService.estadoSolvencia(est).motivo}
+                          >
+                            Pago pend.
                           </span>
                         )}
                       </div>
