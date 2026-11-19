@@ -296,9 +296,10 @@ Callers:
   - Pending requests show their workshop's `CupoBadge`, for information only. Their reservation is already counted, so "Procesar Pago y Formalizar" always fits.
   - Formalizing (`procesarPagoYFormalizarMatricula`) is the only way a new student enters a workshop. It marks the student ACTIVO, AL_DIA and solvent, then enrolls them.
 - **Matrículas** (`MatriculasView`): the list of requests plus `NewEnrollmentWizardModal`.
-  - Step 2 of the wizard lists the workshops with their `CupoBadge`. It disables those that are full, that clash with the code's enrollments or pending requests, or where the student is already enrolled or pending.
-  - Step 3 shows the chosen workshop's `BarraCupo`.
-  - Step 4 emails the tutor (`enviarCorreoMatricula`).
+  - Step 2 of the wizard lets the user pick **up to 2 workshops** (`MAX_TALLERES`) that do not overlap in weekdays and hours. Cards show their `CupoBadge`; it disables those that are full, that clash with the code's enrollments or pending requests, that clash with the other workshop already picked (`sonTalleresEnConflicto`), or where the student is already enrolled or pending. A summary shows "N de 2" and the total fee.
+  - Step 3 shows one `BarraCupo` and one contract per workshop, with a single signature and acceptance.
+  - Submitting creates **one request per workshop** (`crearSolicitudMatricula` in sequence, each with its own `contrato_texto` and `monto_arancel`, same signature); Caja charges and formalizes each separately. The second call sees the first as pending, so the service re-checks clash, duplicates and capacity. If the second fails, the first is kept and step 4 shows the error. `onEnrollmentCreated` receives the array.
+  - Step 4 lists every request code and the total, and emails the tutor once per request (`enviarCorreoMatricula`, in sequence, each with its own "Reintentar").
   - Each row has an envelope button to send or resend that email.
 - **Estudiantes** (`StudentsView`): row actions are Anecdotario (ADMIN), **Cambiar de taller** (ADMIN, `CambiarTallerModal`), Editar, Renovar, and Baja/Reactivar.
   - In Editar, "Estado Pago Anual" is editable only by ADMIN and CAJERO. Other roles keep the current payment values and any pending renewal.

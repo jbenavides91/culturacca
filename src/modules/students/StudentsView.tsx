@@ -1441,7 +1441,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         <NewEnrollmentWizardModal
           isOpen={isEnrollmentWizardOpen}
           onClose={() => setIsEnrollmentWizardOpen(false)}
-          onEnrollmentCreated={(sol) => setToastMessage(`Solicitud de matrícula ${sol.codigo_solicitud} registrada con contrato y firma digital.`)}
+          onEnrollmentCreated={(nuevas) =>
+            setToastMessage(
+              `${nuevas.length > 1 ? 'Solicitudes de matrícula' : 'Solicitud de matrícula'} ${nuevas
+                .map((s) => s.codigo_solicitud)
+                .join(' y ')} registrada${nuevas.length > 1 ? 's' : ''} con contrato y firma digital.`
+            )
+          }
         />
       )}
 

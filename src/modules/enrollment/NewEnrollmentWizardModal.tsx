@@ -28,10 +28,26 @@ import { arancelDeGrupo, etiquetaPeriodo, formatearMonto, montoDeSolicitud } fro
 import { DigitalSignaturePad } from '../../components/DigitalSignaturePad';
 import { BarraCupo, CupoBadge } from '../../components/CupoIndicador';
 
+/** Talleres que se pueden solicitar en un mismo proceso de matrícula */
+const MAX_TALLERES = 2;
+
+const DIAS_LABELS: Record<number, string> = {
+  1: 'Lunes',
+  2: 'Martes',
+  3: 'Miércoles',
+  4: 'Jueves',
+  5: 'Viernes',
+  6: 'Sábado',
+  7: 'Domingo',
+};
+
+type EstadoCorreo = { estado: 'enviando' | 'ok' | 'error'; mensaje?: string };
+
 interface NewEnrollmentWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEnrollmentCreated?: (solicitud: SolicitudMatricula) => void;
+  /** Se crea una solicitud por taller elegido */
+  onEnrollmentCreated?: (solicitudes: SolicitudMatricula[]) => void;
   preselectedGrupoId?: string;
 }
 
@@ -57,8 +73,8 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   const [tutorParentesco, setTutorParentesco] = useState('Madre');
   const [tutorCedula, setTutorCedula] = useState('');
 
-  // Step 2: Workshop Selection
-  const [selectedGrupoId, setSelectedGrupoId] = useState<string>(preselectedGrupoId || '');
+  // Step 2: Workshop Selection (hasta MAX_TALLERES, sin choque de días y horas entre ellos)
+  const [selectedGrupoIds, setSelectedGrupoIds] = useState<string[]>(preselectedGrupoId ? [preselectedGrupoId] : []);
 
   // Step 3: Contract & Digital Signature
   const [firmaDigitalUrl, setFirmaDigitalUrl] = useState('');
@@ -67,17 +83,28 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   // Result / Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [createdSolicitud, setCreatedSolicitud] = useState<SolicitudMatricula | null>(null);
-  // Envío del resumen y contrato firmado al correo del tutor
-  const [correo, setCorreo] = useState<{ estado: 'enviando' | 'ok' | 'error'; mensaje?: string } | null>(null);
+  const [createdSolicitudes, setCreatedSolicitudes] = useState<SolicitudMatricula[]>([]);
+  // Taller cuya solicitud no se pudo registrar (la anterior ya quedó guardada)
+  const [errorParcial, setErrorParcial] = useState<string | null>(null);
+  // Envío del resumen y contrato firmado al correo del tutor, uno por solicitud
+  const [correos, setCorreos] = useState<Record<string, EstadoCorreo>>({});
 
   const enviarCorreoTutor = async (solicitudId: string) => {
-    setCorreo({ estado: 'enviando' });
+    setCorreos((prev) => ({ ...prev, [solicitudId]: { estado: 'enviando' } }));
+    let resultado: EstadoCorreo;
     try {
       const res = await storageService.enviarCorreoMatricula(solicitudId);
-      setCorreo(res.ok ? { estado: 'ok', mensaje: res.destinatario } : { estado: 'error', mensaje: res.error });
+      resultado = res.ok ? { estado: 'ok', mensaje: res.destinatario } : { estado: 'error', mensaje: res.error };
     } catch (err) {
-      setCorreo({ estado: 'error', mensaje: err instanceof Error ? err.message : 'No se pudo enviar el correo.' });
+      resultado = { estado: 'error', mensaje: err instanceof Error ? err.message : 'No se pudo enviar el correo.' };
+    }
+    setCorreos((prev) => ({ ...prev, [solicitudId]: resultado }));
+  };
+
+  /** Envía los correos en serie (la función rechaza reenvíos rápidos por solicitud, no por tutor) */
+  const enviarCorreosTutor = async (ids: string[]) => {
+    for (const id of ids) {
+      await enviarCorreoTutor(id);
     }
   };
 
@@ -107,44 +134,70 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
     }
   };
 
-  /** Ocupación del taller elegido (su propia solicitud previa no cuenta) */
-  const cupoSeleccionado = (() => {
-    if (!selectedGrupoId) return null;
-    const existente = storageService
-      .getEstudiantes()
-      .find((e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase());
-    return storageService.ocupacionTaller(selectedGrupoId, { excluirEstudianteId: existente?.id });
-  })();
+  const codigoNorm = codigoAlumno.trim().toUpperCase();
+  /** Alumno ya registrado con ese código (su propia solicitud previa no cuenta para el cupo) */
+  const alumnoExistente = storageService.getEstudiantes().find((e) => e.matricula.trim().toUpperCase() === codigoNorm);
 
-  const selectedGrupo = useMemo(() => {
-    return grupos.find((g) => g.id === selectedGrupoId) || null;
-  }, [grupos, selectedGrupoId]);
+  /** Talleres elegidos, en el orden en que se marcaron */
+  const selectedGrupos = useMemo(
+    () => selectedGrupoIds.map((id) => grupos.find((g) => g.id === id)).filter((g): g is Grupo => !!g),
+    [grupos, selectedGrupoIds]
+  );
 
-  // Conflict evaluation for selected workshop
-  const conflictoEvaluacion = useMemo(() => {
-    if (!selectedGrupo || !codigoAlumno.trim()) return { tieneConflicto: false };
-    const existing = storageService.getEstudiantes().find(
-      (e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase()
-    );
-    // Inscritos y solicitudes en Caja del mismo código (también si el alumno aún no existe)
-    return storageService.verificarConflictoHorario(existing?.id ?? null, selectedGrupo, {
-      codigoAlumno: codigoAlumno.trim().toUpperCase(),
+  /** Ocupación de un taller sin contar al propio alumno */
+  const ocupacionDe = (grupoId: string) =>
+    storageService.ocupacionTaller(grupoId, { excluirEstudianteId: alumnoExistente?.id });
+
+  /** Motivo por el que un taller elegido no se puede solicitar, o null si está bien */
+  const problemaDeTaller = (grupo: Grupo): string | null => {
+    if (
+      alumnoExistente &&
+      storageService.getInscripciones().some((i) => i.estudiante_id === alumnoExistente.id && i.grupo_id === grupo.id)
+    ) {
+      return `El alumno ya está inscrito en "${grupo.nombre}".`;
+    }
+    const previa = codigoNorm
+      ? storageService
+          .getSolicitudesMatricula()
+          .find(
+            (sol) =>
+              sol.grupo_id === grupo.id &&
+              (sol.estado === 'PENDIENTE_CAJA' || sol.estado === 'SOLVENTE') &&
+              String(sol.codigo_alumno || '').trim().toUpperCase() === codigoNorm
+          )
+      : undefined;
+    if (previa) return `Ya tiene la solicitud ${previa.codigo_solicitud} pendiente en Caja para "${grupo.nombre}".`;
+    if (codigoNorm) {
+      // Inscritos y solicitudes en Caja del mismo código (también si el alumno aún no existe)
+      const c = storageService.verificarConflictoHorario(alumnoExistente?.id ?? null, grupo, { codigoAlumno: codigoNorm });
+      if (c.tieneConflicto) return `"${grupo.nombre}": ${c.motivo || 'colisión de horario'}`;
+    }
+    if (ocupacionDe(grupo.id).nivel === 'LLENO') return `El taller "${grupo.nombre}" está lleno: elige otro taller.`;
+    for (const otro of selectedGrupos) {
+      if (otro.id === grupo.id) continue;
+      const choque = storageService.sonTalleresEnConflicto(grupo, otro);
+      if (choque.tieneConflicto) {
+        return `"${grupo.nombre}" y "${otro.nombre}" coinciden en días y horas. ${choque.motivo || ''}`.trim();
+      }
+    }
+    return null;
+  };
+
+  const problemaSeleccion = selectedGrupos.map(problemaDeTaller).find((p) => p !== null) ?? null;
+  const totalArancel = selectedGrupos.reduce((suma, g) => suma + Number(arancelDeGrupo(g) || 0), 0);
+
+  const toggleTaller = (grupoId: string) => {
+    setErrorMessage(null);
+    setSelectedGrupoIds((prev) => {
+      if (prev.includes(grupoId)) return prev.filter((id) => id !== grupoId);
+      if (prev.length >= MAX_TALLERES) return prev;
+      return [...prev, grupoId];
     });
-  }, [selectedGrupo, codigoAlumno]);
+  };
 
-  // Generated Contract Text
-  const contratoTexto = useMemo(() => {
-    if (!selectedGrupo) return '';
-    const DIAS_LABELS: Record<number, string> = {
-      1: 'Lunes',
-      2: 'Martes',
-      3: 'Miércoles',
-      4: 'Jueves',
-      5: 'Viernes',
-      6: 'Sábado',
-      7: 'Domingo',
-    };
-    const diasStr = (selectedGrupo.dias_semana || []).map((d) => DIAS_LABELS[d] || d).join(', ');
+  // Texto del contrato de un taller (uno por solicitud)
+  const contratoDe = (grupo: Grupo): string => {
+    const diasStr = (grupo.dias_semana || []).map((d) => DIAS_LABELS[d] || d).join(', ');
 
     return generateInstitutionalContractText({
       codigoAlumno: codigoAlumno.trim().toUpperCase() || 'POR ASIGNAR',
@@ -157,26 +210,13 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       parentesco: tutorParentesco,
       telefonoTutor: tutorTelefono.trim(),
       emailTutor: tutorEmail.trim(),
-      tallerNombre: selectedGrupo.nombre,
-      tallerHorario: `${selectedGrupo.hora_inicio} a ${selectedGrupo.hora_fin}`,
+      tallerNombre: grupo.nombre,
+      tallerHorario: `${grupo.hora_inicio} a ${grupo.hora_fin}`,
       tallerDias: diasStr,
-      tallerAula: selectedGrupo.aula || 'Taller Principal',
-      arancel: arancelDeGrupo(selectedGrupo),
+      tallerAula: grupo.aula || 'Taller Principal',
+      arancel: arancelDeGrupo(grupo),
     });
-  }, [
-    codigoAlumno,
-    nombreAlumno,
-    apellidoAlumno,
-    edad,
-    grado,
-    aulaRegular,
-    tutorNombre,
-    tutorCedula,
-    tutorParentesco,
-    tutorTelefono,
-    tutorEmail,
-    selectedGrupo,
-  ]);
+  };
 
   if (!isOpen) return null;
 
@@ -198,16 +238,12 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
   // Validation before going to Step 3
   const handleValidateStep2 = () => {
     setErrorMessage(null);
-    if (!selectedGrupoId) {
-      setErrorMessage('Debe seleccionar el taller extracurricular al que desea matricularse.');
+    if (selectedGrupos.length === 0) {
+      setErrorMessage('Debe seleccionar al menos un taller extracurricular.');
       return;
     }
-    if (conflictoEvaluacion.tieneConflicto) {
-      setErrorMessage(`No se puede seleccionar este taller: ${conflictoEvaluacion.motivo}`);
-      return;
-    }
-    if (cupoSeleccionado?.nivel === 'LLENO') {
-      setErrorMessage('El taller seleccionado está lleno: elige otro taller.');
+    if (problemaSeleccion) {
+      setErrorMessage(`No se puede continuar: ${problemaSeleccion}`);
       return;
     }
     setStep(3);
@@ -224,12 +260,18 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
       setErrorMessage('Debe marcar la casilla de aceptación de los términos del contrato institucional.');
       return;
     }
-    if (!selectedGrupo) return;
+    if (selectedGrupos.length === 0) return;
 
-    try {
-      setIsSubmitting(true);
-      const nueva = storageService.crearSolicitudMatricula({
-        codigo_alumno: codigoAlumno.trim().toUpperCase(),
+    setIsSubmitting(true);
+    const creadas: SolicitudMatricula[] = [];
+    let fallo: string | null = null;
+    // Una solicitud por taller, con su contrato y arancel y la misma firma. La segunda ya ve la
+    // primera en Caja, así que el servicio vuelve a comprobar choques, duplicados y cupo.
+    for (const grupo of selectedGrupos) {
+      try {
+        creadas.push(
+          storageService.crearSolicitudMatricula({
+        codigo_alumno: codigoNorm,
         nombre_alumno: nombreAlumno.trim(),
         apellido_alumno: apellidoAlumno.trim(),
         edad,
@@ -240,26 +282,36 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
         tutor_telefono: tutorTelefono.trim(),
         tutor_parentesco: tutorParentesco,
         tutor_cedula: tutorCedula.trim() || 'N/A',
-        grupo_id: selectedGrupo.id,
-        grupo_nombre: selectedGrupo.nombre,
-        contrato_texto: contratoTexto,
+        grupo_id: grupo.id,
+        grupo_nombre: grupo.nombre,
+        contrato_texto: contratoDe(grupo),
         contrato_firmado: true,
         firma_digital_url: firmaDigitalUrl,
         fecha_firma: new Date().toISOString(),
         firmante_nombre: tutorNombre.trim(),
-        monto_arancel: arancelDeGrupo(selectedGrupo),
-      });
-
-      setCreatedSolicitud(nueva);
-      setStep(4);
-      onEnrollmentCreated?.(nueva);
-      // El correo no bloquea: la solicitud ya quedó registrada aunque el envío falle
-      void enviarCorreoTutor(nueva.id);
-    } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Error al registrar la solicitud');
-    } finally {
-      setIsSubmitting(false);
+        monto_arancel: arancelDeGrupo(grupo),
+          })
+        );
+      } catch (err: unknown) {
+        fallo = `No se registró la solicitud de "${grupo.nombre}": ${
+          err instanceof Error ? err.message : 'error al registrar la solicitud'
+        }`;
+        break;
+      }
     }
+    setIsSubmitting(false);
+
+    if (creadas.length === 0) {
+      setErrorMessage(fallo ?? 'Error al registrar la solicitud');
+      return;
+    }
+    // Las solicitudes ya creadas se conservan aunque falle la siguiente (no es transaccional)
+    setErrorParcial(fallo);
+    setCreatedSolicitudes(creadas);
+    setStep(4);
+    onEnrollmentCreated?.(creadas);
+    // El correo no bloquea: las solicitudes ya quedaron registradas aunque el envío falle
+    void enviarCorreosTutor(creadas.map((s) => s.id));
   };
 
   const handlePrintVoucher = () => {
@@ -337,7 +389,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
               >
                 {step > 2 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '2'}
               </div>
-              <span className="hidden sm:inline">2. Taller Deseado</span>
+              <span className="hidden sm:inline">2. Talleres</span>
             </div>
 
             <div className="flex-1 h-0.5 mx-3 bg-slate-200 dark:bg-slate-700">
@@ -587,26 +639,37 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
               <div>
                 <h4 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9] mb-1 flex items-center space-x-2">
                   <Palette className="w-4 h-4 text-[#4F46E5] dark:text-[#818CF8]" />
-                  <span>Seleccionar Taller Extracurricular Deseado</span>
+                  <span>Seleccionar Talleres Extracurriculares</span>
                 </h4>
                 <p className="text-xs text-[#667085] dark:text-[#94A3B8]">
-                  Alumno: <strong>{nombreAlumno} {apellidoAlumno}</strong> ({codigoAlumno} - {grado}). Un alumno puede estar en más de un taller, siempre y cuando no colisionen sus horarios.
+                  Alumno: <strong>{nombreAlumno} {apellidoAlumno}</strong> ({codigoAlumno} - {grado}). Puede elegir hasta{' '}
+                  {MAX_TALLERES} talleres, siempre que no coincidan en días y horas. Se registra una solicitud por taller.
                 </p>
+              </div>
+
+              {/* Resumen de la selección */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] text-[11px]">
+                <span className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
+                  {selectedGrupos.length} de {MAX_TALLERES} talleres seleccionados
+                  {selectedGrupos.length > 0 && (
+                    <span className="font-normal text-[#667085] dark:text-[#94A3B8]">
+                      {' '}
+                      · {selectedGrupos.map((g) => g.nombre).join(' + ')}
+                    </span>
+                  )}
+                </span>
+                {selectedGrupos.length > 0 && (
+                  <span className="font-bold font-mono text-[#4F46E5] dark:text-[#818CF8]">
+                    Total: {formatearMonto(totalArancel)} {etiquetaPeriodo()}
+                  </span>
+                )}
               </div>
 
               {/* Workshops Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2">
                 {grupos.map((grupo) => {
-                  const isSelected = selectedGrupoId === grupo.id;
-                  const DIAS_LABELS: Record<number, string> = {
-                    1: 'Lunes',
-                    2: 'Martes',
-                    3: 'Miércoles',
-                    4: 'Jueves',
-                    5: 'Viernes',
-                    6: 'Sábado',
-                    7: 'Domingo',
-                  };
+                  const ordenSeleccion = selectedGrupoIds.indexOf(grupo.id);
+                  const isSelected = ordenSeleccion !== -1;
                   const diasTexto = (grupo.dias_semana || [])
                     .map((d) => DIAS_LABELS[d] || d)
                     .join(', ');
@@ -614,10 +677,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   // Check conflict for this card
                   let hasConflict = false;
                   let conflictText = '';
-                  const existing = storageService.getEstudiantes().find(
-                    (e) => e.matricula.trim().toUpperCase() === codigoAlumno.trim().toUpperCase()
-                  );
-                  const codigoNorm = codigoAlumno.trim().toUpperCase();
+                  const existing = alumnoExistente;
                   const yaInscrito =
                     !!existing &&
                     storageService.getInscripciones().some((i) => i.estudiante_id === existing.id && i.grupo_id === grupo.id);
@@ -646,21 +706,38 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                       conflictText = c.motivo || 'Colisión de horario';
                     }
                   }
+                  // Sin choque con el otro taller ya elegido en este mismo proceso
+                  if (!hasConflict && !isSelected) {
+                    for (const elegido of selectedGrupos) {
+                      const choque = storageService.sonTalleresEnConflicto(grupo, elegido);
+                      if (choque.tieneConflicto) {
+                        hasConflict = true;
+                        conflictText = `Choca con «${elegido.nombre}», ya seleccionado. ${choque.motivo || ''}`.trim();
+                        break;
+                      }
+                    }
+                  }
                   // Cupo: inscritos + solicitudes en Caja (la propia del alumno no cuenta)
-                  const ocupacion = storageService.ocupacionTaller(grupo.id, { excluirEstudianteId: existing?.id });
+                  const ocupacion = ocupacionDe(grupo.id);
                   const lleno = ocupacion.nivel === 'LLENO';
-                  const bloqueado = hasConflict || lleno;
+                  const bloqueado = !isSelected && (hasConflict || lleno);
+                  const limiteAlcanzado = !isSelected && !bloqueado && selectedGrupoIds.length >= MAX_TALLERES;
 
                   return (
                     <div
                       key={grupo.id}
+                      role="checkbox"
+                      aria-checked={isSelected}
                       onClick={() => {
-                        if (!bloqueado) setSelectedGrupoId(grupo.id);
+                        if (!bloqueado && !limiteAlcanzado) toggleTaller(grupo.id);
                       }}
-                      aria-disabled={bloqueado}
+                      aria-disabled={bloqueado || limiteAlcanzado}
+                      title={limiteAlcanzado ? `Máximo ${MAX_TALLERES} talleres: quite uno para elegir otro` : undefined}
                       className={`p-4 rounded-xl border-2 transition-all flex flex-col justify-between ${
                         bloqueado
                           ? 'opacity-60 bg-slate-50 dark:bg-slate-900/40 border-rose-300 dark:border-rose-900/40 cursor-not-allowed'
+                          : limiteAlcanzado
+                          ? 'opacity-50 border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D] cursor-not-allowed'
                           : isSelected
                           ? 'border-[#4F46E5] bg-indigo-50/70 dark:bg-indigo-950/40 shadow-xs cursor-pointer ring-2 ring-indigo-500/20'
                           : 'border-[#E7EAF0] dark:border-[#2B3442] hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer bg-white dark:bg-[#1B222D]'
@@ -673,8 +750,11 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                             <CupoBadge ocupacion={ocupacion} />
                           </div>
                           {isSelected && (
-                            <span className="w-5 h-5 rounded-full bg-[#4F46E5] text-white flex items-center justify-center shrink-0">
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span
+                              className="w-5 h-5 rounded-full bg-[#4F46E5] text-white flex items-center justify-center shrink-0 text-[10px] font-bold"
+                              title={`Taller ${ordenSeleccion + 1}`}
+                            >
+                              {selectedGrupoIds.length > 1 ? ordenSeleccion + 1 : <Check className="w-3.5 h-3.5 stroke-[3]" />}
                             </span>
                           )}
                         </div>
@@ -729,6 +809,13 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 })}
               </div>
 
+              {problemaSeleccion && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{problemaSeleccion}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between pt-4 border-t border-[#E7EAF0] dark:border-[#2B3442]">
                 <button
                   type="button"
@@ -742,7 +829,7 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 <button
                   type="button"
                   onClick={handleValidateStep2}
-                  disabled={!selectedGrupoId || conflictoEvaluacion.tieneConflicto || cupoSeleccionado?.nivel === 'LLENO'}
+                  disabled={selectedGrupos.length === 0 || !!problemaSeleccion}
                   className="px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
                 >
                   <span>Continuar a Contrato y Firma</span>
@@ -761,24 +848,35 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   <span>Contrato Digital Institucional de Matrícula</span>
                 </h4>
                 <p className="text-xs text-[#667085] dark:text-[#94A3B8]">
-                  Lea el contrato generado con los datos de matrícula. El padre o tutor debe firmar en el recuadro interactivo.
+                  {selectedGrupos.length > 1
+                    ? `Se genera un contrato por taller (${selectedGrupos.length}). El padre o tutor los firma una sola vez en el recuadro interactivo.`
+                    : 'Lea el contrato generado con los datos de matrícula. El padre o tutor debe firmar en el recuadro interactivo.'}
                 </p>
               </div>
 
-              {/* Cupo del taller elegido */}
-              {selectedGrupo && cupoSeleccionado && (
-                <div className="p-3 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D]">
-                  <p className="text-[11px] font-semibold text-[#172033] dark:text-[#F1F5F9] mb-1.5">
-                    Cupo de {selectedGrupo.nombre}
-                  </p>
-                  <BarraCupo ocupacion={cupoSeleccionado} />
-                </div>
-              )}
-
-              {/* Readonly Contract Scroll Box */}
-              <div className="p-4 bg-[#F7F8FA] dark:bg-[#151A22] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] max-h-56 overflow-y-auto font-mono text-[11px] leading-relaxed text-[#172033] dark:text-[#F1F5F9] whitespace-pre-line select-text border-l-4 border-l-[#4F46E5]">
-                {contratoTexto}
+              {/* Cupo de cada taller elegido */}
+              <div className={`grid gap-3 ${selectedGrupos.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+                {selectedGrupos.map((g) => (
+                  <div key={g.id} className="p-3 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] bg-white dark:bg-[#1B222D]">
+                    <p className="text-[11px] font-semibold text-[#172033] dark:text-[#F1F5F9] mb-1.5">Cupo de {g.nombre}</p>
+                    <BarraCupo ocupacion={ocupacionDe(g.id)} />
+                  </div>
+                ))}
               </div>
+
+              {/* Readonly Contract Scroll Box (uno por taller) */}
+              {selectedGrupos.map((g, i) => (
+                <div key={g.id} className="space-y-1.5">
+                  {selectedGrupos.length > 1 && (
+                    <p className="text-[11px] font-bold text-[#172033] dark:text-[#F1F5F9]">
+                      Contrato {i + 1} de {selectedGrupos.length}: {g.nombre}
+                    </p>
+                  )}
+                  <div className="p-4 bg-[#F7F8FA] dark:bg-[#151A22] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] max-h-56 overflow-y-auto font-mono text-[11px] leading-relaxed text-[#172033] dark:text-[#F1F5F9] whitespace-pre-line select-text border-l-4 border-l-[#4F46E5]">
+                    {contratoDe(g)}
+                  </div>
+                </div>
+              ))}
 
               {/* Digital Signature Canvas */}
               <div className="pt-2">
@@ -801,7 +899,11 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   htmlFor="accept-terms"
                   className="text-xs text-indigo-950 dark:text-indigo-200 leading-snug cursor-pointer font-medium"
                 >
-                  Declaro bajo fe de juramento que he leído, comprendido y aceptado todas las cláusulas, deberes de asistencia, aranceles y normativas del presente <strong>Contrato Digital de Matrícula</strong>, autorizando la emisión de la firma digital correspondiente.
+                  Declaro bajo fe de juramento que he leído, comprendido y aceptado todas las cláusulas, deberes de asistencia, aranceles y normativas {selectedGrupos.length > 1 ? (
+                    <>de los presentes <strong>Contratos Digitales de Matrícula</strong></>
+                  ) : (
+                    <>del presente <strong>Contrato Digital de Matrícula</strong></>
+                  )}, autorizando la emisión de la firma digital correspondiente.
                 </label>
               </div>
 
@@ -827,7 +929,11 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Firmar y Enviar Solicitud a Caja</span>
+                      <span>
+                        {selectedGrupos.length > 1
+                          ? `Firmar y Enviar ${selectedGrupos.length} Solicitudes a Caja`
+                          : 'Firmar y Enviar Solicitud a Caja'}
+                      </span>
                     </>
                   )}
                 </button>
@@ -836,7 +942,12 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
           )}
 
           {/* STEP 4: Success & Voucher */}
-          {step === 4 && createdSolicitud && (
+          {step === 4 && createdSolicitudes.length > 0 && (() => {
+            const primera = createdSolicitudes[0];
+            const varias = createdSolicitudes.length > 1;
+            const codigos = createdSolicitudes.map((s) => s.codigo_solicitud);
+            const total = createdSolicitudes.reduce((suma, s) => suma + Number(montoDeSolicitud(s) || 0), 0);
+            return (
             <div className="space-y-4 sm:space-y-6 text-center py-4 animate-fadeIn">
               <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-300 dark:border-emerald-800">
                 <CheckCircle2 className="w-8 h-8" />
@@ -847,58 +958,81 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   Estado: PENDIENTE DE CAJA & SOLVENCIA
                 </span>
                 <h4 className="text-xl font-bold text-[#172033] dark:text-[#F1F5F9]">
-                  ¡Contrato Firmado y Solicitud Registrada!
+                  {varias ? '¡Contratos Firmados y Solicitudes Registradas!' : '¡Contrato Firmado y Solicitud Registrada!'}
                 </h4>
                 <p className="text-xs text-[#667085] dark:text-[#94A3B8] max-w-md mx-auto">
-                  La solicitud de matrícula ha sido enviada al módulo de <strong>Caja y Validación</strong>.
+                  {varias
+                    ? `Se enviaron ${createdSolicitudes.length} solicitudes de matrícula, una por taller,`
+                    : 'La solicitud de matrícula ha sido enviada'}{' '}
+                  al módulo de <strong>Caja y Validación</strong>.
                 </p>
               </div>
 
+              {errorParcial && (
+                <div className="max-w-md mx-auto p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs text-left flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span>{errorParcial}</span>
+                </div>
+              )}
+
               {/* Receipt Summary Card */}
               <div className="max-w-md mx-auto bg-[#F7F8FA] dark:bg-[#151A22] p-4 rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] text-left space-y-2 text-xs">
-                <div className="flex justify-between items-center pb-2 border-b border-[#E7EAF0] dark:border-[#2B3442]">
-                  <span className="text-[#667085] dark:text-[#94A3B8]">Código de Solicitud:</span>
-                  <span className="font-mono font-bold text-sm text-[#4F46E5] dark:text-[#818CF8]">
-                    {createdSolicitud.codigo_solicitud}
-                  </span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-[#667085] dark:text-[#94A3B8]">Alumno:</span>
                   <span className="font-semibold text-[#172033] dark:text-[#F1F5F9]">
-                    {createdSolicitud.nombre_alumno} {createdSolicitud.apellido_alumno} ({createdSolicitud.codigo_alumno})
+                    {primera.nombre_alumno} {primera.apellido_alumno} ({primera.codigo_alumno})
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#667085] dark:text-[#94A3B8]">Grado y Aula:</span>
-                  <span>{createdSolicitud.grado} - {createdSolicitud.aula_regular}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#667085] dark:text-[#94A3B8]">Taller:</span>
-                  <span className="font-semibold">{createdSolicitud.grupo_nombre}</span>
+                  <span>{primera.grado} - {primera.aula_regular}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#667085] dark:text-[#94A3B8]">Tutor / Firmante:</span>
-                  <span>{createdSolicitud.tutor_nombre} ({createdSolicitud.tutor_parentesco})</span>
+                  <span>{primera.tutor_nombre} ({primera.tutor_parentesco})</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-[#667085] dark:text-[#94A3B8]">Arancel a Pagar:</span>
-                  <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                    {formatearMonto(montoDeSolicitud(createdSolicitud))} {etiquetaPeriodo()}
-                  </span>
-                </div>
+                {createdSolicitudes.map((s) => (
+                  <div key={s.id} className="pt-2 border-t border-[#E7EAF0] dark:border-[#2B3442] space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#667085] dark:text-[#94A3B8]">Código de Solicitud:</span>
+                      <span className="font-mono font-bold text-sm text-[#4F46E5] dark:text-[#818CF8]">{s.codigo_solicitud}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold">{s.grupo_nombre}</span>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {formatearMonto(montoDeSolicitud(s))} {etiquetaPeriodo()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {varias && (
+                  <div className="flex justify-between pt-2 border-t border-[#E7EAF0] dark:border-[#2B3442]">
+                    <span className="text-[#667085] dark:text-[#94A3B8]">Total a Pagar:</span>
+                    <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      {formatearMonto(total)} {etiquetaPeriodo()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Next Step Notice */}
               <div className="max-w-md mx-auto p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 text-left flex items-start space-x-2.5">
                 <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
-                  <strong>Paso siguiente en Caja:</strong> El padre de familia debe presentarse a la ventanilla de Caja con el código <strong>{createdSolicitud.codigo_solicitud}</strong>. La chica de caja validará los datos y el contrato firmado, registrará el pago en el sistema contable y marcará al alumno como <strong>SOLVENTE</strong> para formalizar la matrícula.
+                  <strong>Paso siguiente en Caja:</strong> El padre de familia debe presentarse a la ventanilla de Caja con{' '}
+                  {varias ? 'los códigos' : 'el código'} <strong>{codigos.join(' y ')}</strong>. La chica de caja validará los datos y{' '}
+                  {varias ? 'cada contrato firmado, registrará cada pago' : 'el contrato firmado, registrará el pago'} en el sistema contable y marcará al alumno como <strong>SOLVENTE</strong> para formalizar la matrícula.
                 </div>
               </div>
 
               {/* Correo al tutor (resumen + contrato firmado en PDF) */}
-              {correo && (
+              {createdSolicitudes.map((sol) => {
+                const correo = correos[sol.id];
+                if (!correo) return null;
+                const etiqueta = varias ? ` de ${sol.codigo_solicitud} (${sol.grupo_nombre})` : '';
+                return (
                 <div
+                  key={sol.id}
                   className={`max-w-md mx-auto p-3 rounded-xl border text-xs text-left flex items-start gap-2.5 ${
                     correo.estado === 'ok'
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-200'
@@ -918,23 +1052,23 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                   <div className="flex-1 min-w-0 leading-relaxed">
                     {correo.estado === 'enviando' && (
                       <span>
-                        Enviando el resumen y el contrato firmado a <strong>{createdSolicitud.tutor_email}</strong>…
+                        Enviando el resumen y el contrato firmado{etiqueta} a <strong>{sol.tutor_email}</strong>…
                       </span>
                     )}
                     {correo.estado === 'ok' && (
                       <span>
-                        Resumen y contrato firmado (PDF) enviados a <strong>{correo.mensaje || createdSolicitud.tutor_email}</strong>.
+                        Resumen y contrato firmado (PDF){etiqueta} enviados a <strong>{correo.mensaje || sol.tutor_email}</strong>.
                       </span>
                     )}
                     {correo.estado === 'error' && (
                       <>
                         <span className="block">
-                          No se pudo enviar el correo al tutor. La solicitud sí quedó registrada.
+                          No se pudo enviar el correo{etiqueta} al tutor. La solicitud sí quedó registrada.
                         </span>
                         {correo.mensaje && <span className="block text-[11px] opacity-80 mt-0.5">{correo.mensaje}</span>}
                         <button
                           type="button"
-                          onClick={() => void enviarCorreoTutor(createdSolicitud.id)}
+                          onClick={() => void enviarCorreoTutor(sol.id)}
                           className="mt-1.5 inline-flex items-center gap-1 font-semibold underline cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
@@ -944,7 +1078,8 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                     )}
                   </div>
                 </div>
-              )}
+                );
+              })}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-center space-x-3 pt-2">
@@ -966,7 +1101,8 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

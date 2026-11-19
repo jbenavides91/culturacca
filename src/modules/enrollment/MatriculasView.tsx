@@ -760,9 +760,12 @@ export const MatriculasView: React.FC<MatriculasViewProps> = ({
         <NewEnrollmentWizardModal
           isOpen={isWizardOpen}
           onClose={() => setIsWizardOpen(false)}
-          onEnrollmentCreated={(nueva) => {
+          onEnrollmentCreated={(nuevas) => {
+            const codigos = nuevas.map((s) => s.codigo_solicitud).join(' y ');
             setToastMessage(
-              `¡Solicitud ${nueva.codigo_solicitud} registrada con contrato firmado! El tutor debe presentarse en Caja para registrar el pago.`
+              nuevas.length > 1
+                ? `¡Solicitudes ${codigos} registradas con contrato firmado! El tutor debe presentarse en Caja para registrar los pagos.`
+                : `¡Solicitud ${codigos} registrada con contrato firmado! El tutor debe presentarse en Caja para registrar el pago.`
             );
             loadData();
           }}
