@@ -181,11 +181,13 @@ Callers:
 - `crearSolicitudMatricula` rejects clashes for new and existing students, plus **duplicates** (already enrolled, or already pending in Caja, in the same workshop).
 
 **Cambiar de taller** (ADMIN only; the `ArrowRightLeft` button in Estudiantes, shown when the student has at least one workshop):
-- `CambiarTallerModal` lists `opcionesCambioDeTaller(estudianteId, origenId)`: every other workshop with its `CupoBadge`, and when unavailable, the reason (already enrolled, full, or a clash that ignores the source workshop).
-- `cambiarDeTaller(estudianteId, origenId, destinoId)` checks the `perfilActual` role, solvency, the destination's capacity and the clash, then:
-  - removes the source enrollment and inserts the destination one;
-  - logs `BAJA_TALLER` ("Cambio a …") and `ALTA_TALLER` ("Cambio desde …") in `movimientos_inscripcion`, so the cut report counts it.
-- The source workshop's attendance and notes are kept.
+- **Several workshops at once** (e.g. 2 → 2): `CambiarTallerModal` has checkboxes for the workshops the student **leaves** (at least one; the first is pre-checked) and for the **new** workshops, from 1 up to as many as they leave.
+- `opcionesCambioDeTaller(estudianteId, origenIds)` (one id or an array) lists every other workshop with its `CupoBadge`, and when unavailable, the reason: already enrolled in a kept workshop, full, or a clash that ignores the workshops being left. The modal also blocks a new workshop that clashes with another new one already picked (`sonTalleresEnConflicto`), drops picks that become invalid when the left workshops change, and shows a "Deja: … → Entra a: …" summary.
+- `cambiarDeTalleres(estudianteId, origenIds, destinoIds)` validates **everything before writing**: the `perfilActual` role, 1 ≤ new ≤ left, enrollment in each left workshop, each destination available, new workshops not clashing with each other, and solvency. Then it:
+  - removes the left enrollments and inserts one per new workshop;
+  - logs one `BAJA_TALLER` per left workshop ("Cambio a "A" y "B"") and one `ALTA_TALLER` per new one ("Cambio desde …") in `movimientos_inscripcion`, so the cut report counts them.
+- `cambiarDeTaller(estudianteId, origenId, destinoId)` is kept as a 1 → 1 wrapper.
+- The left workshops' attendance and notes are kept.
 
 **Workshop capacity (cupo)**:
 - `grupos.cupo_maximo` (migration `0014`; integer > 0, nullable) is **required** in the Talleres create and edit forms. Choosing a catalogued room with `capacidad` pre-fills it when it is empty.

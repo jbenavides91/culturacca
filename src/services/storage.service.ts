@@ -830,14 +830,19 @@ class StorageService {
     return { tieneConflicto: false };
   }
 
-  /** Talleres a los que se puede cambiar un alumno desde `origenId`, con el motivo si no se puede */
+  /**
+   * Talleres a los que se puede cambiar un alumno que deja `origenIds` (uno o varios), con el motivo
+   * si no se puede. Los talleres que deja no cuentan para el choque de horario. El choque entre los
+   * destinos elegidos lo revisa quien llama (`sonTalleresEnConflicto`).
+   */
   opcionesCambioDeTaller(
     estudianteId: string,
-    origenId: string
+    origenIds: string | string[]
   ): { grupo: Grupo; ocupacion: OcupacionTaller; disponible: boolean; motivo?: string }[] {
+    const origenes = new Set(Array.isArray(origenIds) ? origenIds : [origenIds]);
     const inscritos = new Set(this.getGruposByEstudiante(estudianteId).map((g) => g.id));
     return this.getGrupos()
-      .filter((g) => g.id !== origenId)
+      .filter((g) => !origenes.has(g.id))
       .map((grupo) => {
         const ocupacion = this.ocupacionTaller(grupo.id, { excluirEstudianteId: estudianteId });
         let motivo: string | undefined;
@@ -845,56 +850,105 @@ class StorageService {
         else if (ocupacion.cupo !== null && ocupacion.ocupados >= ocupacion.cupo) {
           motivo = `Taller lleno (${ocupacion.ocupados}/${ocupacion.cupo})`;
         } else {
-          const c = this.verificarConflictoHorario(estudianteId, grupo, { excluirGrupoIds: [origenId] });
+          const c = this.verificarConflictoHorario(estudianteId, grupo, { excluirGrupoIds: [...origenes] });
           if (c.tieneConflicto) motivo = c.motivo || `Choca con "${c.grupoConflictivo?.nombre}"`;
         }
         return { grupo, ocupacion, disponible: !motivo, motivo };
       });
   }
 
-  /**
-   * Cambia a un alumno inscrito de un taller a otro (solo ADMIN). Valida solvencia, cupo del destino
-   * y choque de horario sin contar el taller que deja. El historial de asistencia del taller de origen
-   * se conserva; la bitácora registra la baja y el alta para el corte bimestral.
-   */
+  /** Cambia a un alumno de un taller a otro (envoltorio de `cambiarDeTalleres`) */
   cambiarDeTaller(estudianteId: string, origenId: string, destinoId: string): { origen: Grupo; destino: Grupo } {
+    const { origenes, destinos } = this.cambiarDeTalleres(estudianteId, [origenId], [destinoId]);
+    return { origen: origenes[0], destino: destinos[0] };
+  }
+
+  /**
+   * Cambia a un alumno de uno o varios talleres a otros (solo ADMIN): deja `origenIds` y entra a
+   * `destinoIds` (de 1 hasta tantos como deja). Valida todo antes de escribir: solvencia, inscripción
+   * en cada origen, cupo de cada destino, choque de horario sin contar los talleres que deja y que los
+   * destinos no choquen entre sí. La asistencia y anotaciones de los talleres que deja se conservan;
+   * la bitácora registra una baja por origen y un alta por destino para el corte bimestral.
+   */
+  cambiarDeTalleres(
+    estudianteId: string,
+    origenIds: string[],
+    destinoIds: string[]
+  ): { origenes: Grupo[]; destinos: Grupo[] } {
     if (this.perfilActual?.rol !== 'ADMIN') {
       throw new Error('Solo un Administrador puede cambiar a un alumno de taller.');
     }
     const estudiante = this.getEstudiantes().find((e) => e.id === estudianteId);
-    const origen = this.getGrupoById(origenId);
-    const destino = this.getGrupoById(destinoId);
     if (!estudiante) throw new Error('Alumno no encontrado.');
-    if (!origen || !destino) throw new Error('Taller no encontrado.');
-    if (origenId === destinoId) throw new Error('Elige un taller distinto al actual.');
 
-    const inscripciones = this.getInscripciones();
-    const actual = inscripciones.filter((i) => i.estudiante_id === estudianteId && i.grupo_id === origenId);
-    if (actual.length === 0) throw new Error(`El alumno no está inscrito en "${origen.nombre}".`);
+    const idsOrigen = [...new Set(origenIds)];
+    const idsDestino = [...new Set(destinoIds)];
+    if (idsOrigen.length === 0) throw new Error('Elige al menos un taller que deja.');
+    if (idsDestino.length === 0) throw new Error('Elige al menos un taller nuevo.');
+    if (idsDestino.length > idsOrigen.length) {
+      throw new Error(`Puede elegir como máximo ${idsOrigen.length} taller(es) nuevo(s): tantos como deja.`);
+    }
+    if (idsDestino.some((id) => idsOrigen.includes(id))) {
+      throw new Error('Un taller nuevo no puede ser uno de los que deja.');
+    }
 
-    const opcion = this.opcionesCambioDeTaller(estudianteId, origenId).find((o) => o.grupo.id === destinoId);
-    if (!opcion?.disponible) throw new Error(opcion?.motivo || 'No se puede cambiar a ese taller.');
+    const origenes = idsOrigen.map((id) => this.getGrupoById(id));
+    const destinos = idsDestino.map((id) => this.getGrupoById(id));
+    if (origenes.some((g) => !g) || destinos.some((g) => !g)) throw new Error('Taller no encontrado.');
+    const gOrigen = origenes as Grupo[];
+    const gDestino = destinos as Grupo[];
+
+    const actuales = this.getInscripciones().filter(
+      (i) => i.estudiante_id === estudianteId && idsOrigen.includes(i.grupo_id)
+    );
+    for (const g of gOrigen) {
+      if (!actuales.some((i) => i.grupo_id === g.id)) {
+        throw new Error(`El alumno no está inscrito en "${g.nombre}".`);
+      }
+    }
+
+    const opciones = this.opcionesCambioDeTaller(estudianteId, idsOrigen);
+    for (const g of gDestino) {
+      const opcion = opciones.find((o) => o.grupo.id === g.id);
+      if (!opcion?.disponible) throw new Error(opcion?.motivo || `No se puede cambiar a "${g.nombre}".`);
+    }
+    for (let i = 0; i < gDestino.length; i++) {
+      for (let j = i + 1; j < gDestino.length; j++) {
+        const choque = this.sonTalleresEnConflicto(gDestino[i], gDestino[j]);
+        if (choque.tieneConflicto) {
+          throw new Error(`"${gDestino[i].nombre}" y "${gDestino[j].nombre}" coinciden en días y horas.`);
+        }
+      }
+    }
     const solvencia = this.estadoSolvencia(estudiante);
     if (!solvencia.solvente) throw new Error(`No se puede cambiar de taller: ${solvencia.motivo}.`);
 
-    this.remove(STORAGE_KEYS.INSCRIPCIONES, actual.map((i) => i.id));
-    this.registrarMovimiento('BAJA_TALLER', estudianteId, origenId, `Cambio a "${destino.nombre}"`);
+    const lista = (gs: Grupo[]) => gs.map((g) => `"${g.nombre}"`).join(' y ');
+
+    this.remove(STORAGE_KEYS.INSCRIPCIONES, actuales.map((i) => i.id));
+    gOrigen.forEach((g) =>
+      this.registrarMovimiento('BAJA_TALLER', estudianteId, g.id, `Cambio a ${lista(gDestino)}`)
+    );
 
     const restantes = this.getInscripciones();
-    restantes.push({
-      id: `ins-${nuevoId()}`,
-      grupo_id: destinoId,
-      estudiante_id: estudianteId,
-      fecha_inscripcion: fechaLocalISO(),
-    });
+    gDestino.forEach((g) =>
+      restantes.push({
+        id: `ins-${nuevoId()}`,
+        grupo_id: g.id,
+        estudiante_id: estudianteId,
+        fecha_inscripcion: fechaLocalISO(),
+      })
+    );
     this.write(STORAGE_KEYS.INSCRIPCIONES, restantes);
-    this.registrarMovimiento('ALTA_TALLER', estudianteId, destinoId, `Cambio desde "${origen.nombre}"`);
+    gDestino.forEach((g) =>
+      this.registrarMovimiento('ALTA_TALLER', estudianteId, g.id, `Cambio desde ${lista(gOrigen)}`)
+    );
 
     cacheService.invalidateByTag('estudiantes');
     cacheService.invalidateByTag('inscripciones');
     cacheService.invalidateByTag('alertas');
     notifyDataChange();
-    return { origen, destino };
+    return { origenes: gOrigen, destinos: gDestino };
   }
 
   /**
