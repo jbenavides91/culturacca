@@ -7,6 +7,7 @@ import {
   Grupo,
   PermanenciaAlumno,
   ResultadoCorte,
+  MatriculaCorte,
   Sesion,
 } from '../types/attendance';
 import { storageService } from './storage.service';
@@ -486,8 +487,17 @@ export class ExportService {
    * Corte bimestral: 5 hojas fijas (Resumen, Cobro por Taller, Detalle por Alumno, Altas y Bajas, Matrículas).
    * Montos como números (C$) para que se puedan sumar y filtrar en Excel.
    */
-  exportCorteBimestral(datos: ResultadoCorte): void {
+  /**
+   * `matriculasFiltradas`: la lista y el periodo del filtro de la tarjeta "Matrículas cobradas"
+   * (por defecto, las del corte).
+   */
+  exportCorteBimestral(
+    datos: ResultadoCorte,
+    matriculasFiltradas?: { lista: MatriculaCorte[]; etiqueta: string }
+  ): void {
     const { corte, meses, resumen } = datos;
+    const listaMatriculas = matriculasFiltradas?.lista ?? datos.matriculas;
+    const periodoMatriculas = matriculasFiltradas?.etiqueta ?? `Corte ${corte.nombre}`;
     const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const etiquetaMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(0, 4)}`;
     const fecha = (iso: string) => {
@@ -517,8 +527,9 @@ export class ExportService {
       ['Mensualidades a cobrar:', resumen.mesesCobrables],
       ['Meses cubiertos por matrícula:', resumen.mesesMatricula],
       ['Cobro esperado (C$):', resumen.cobroEsperado],
-      ['Matrículas cobradas:', resumen.matriculasCobradas],
-      ['Monto de matrículas (C$):', resumen.montoMatriculas],
+      ['Periodo de las matrículas:', periodoMatriculas],
+      ['Matrículas cobradas:', listaMatriculas.length],
+      ['Monto de matrículas (C$):', listaMatriculas.reduce((s, m) => s + m.monto, 0)],
       ['Altas:', resumen.altas],
       ['Bajas:', resumen.bajas],
       [''],
@@ -606,12 +617,13 @@ export class ExportService {
       'Altas y Bajas'
     );
 
-    const matriculas = [...datos.matriculas].sort((a, b) => a.fecha_pago.localeCompare(b.fecha_pago));
+    const matriculas = [...listaMatriculas].sort((a, b) => a.fecha_pago.localeCompare(b.fecha_pago));
     XLSX.utils.book_append_sheet(
       wb,
       hojaTabla(
-        ['Fecha de pago', 'Código', 'Trámite', 'Alumno', 'Taller', 'Recibo', 'Método', 'Monto (C$)'],
+        ['Año', 'Fecha de pago', 'Código', 'Trámite', 'Alumno', 'Taller', 'Recibo', 'Método', 'Monto (C$)'],
         matriculas.map((m) => [
+          Number(m.fecha_pago.slice(0, 4)),
           fecha(m.fecha_pago),
           m.codigo_solicitud,
           m.tipo_tramite === 'RENOVACION_ANUAL' ? 'Renovación' : 'Nueva matrícula',
@@ -621,7 +633,7 @@ export class ExportService {
           m.metodo_pago || '',
           m.monto,
         ]),
-        [14, 16, 16, 30, 28, 16, 14, 12]
+        [8, 14, 16, 16, 30, 28, 16, 14, 12]
       ),
       'Matrículas'
     );

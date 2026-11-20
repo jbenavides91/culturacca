@@ -2987,6 +2987,44 @@ class StorageService {
    * No registra mensualidades: un mes es cobrable si el alumno estuvo inscrito al menos un día
    * de ese mes (mes completo), salvo el mes que cubre su matrícula pagada.
    */
+  /**
+   * Matrículas cobradas (solicitudes solventes) cuya fecha de pago local (`fechaPagoLocal`: fecha_pago,
+   * o fecha_aceptacion) cae en el rango YYYY-MM-DD; ambos extremos opcionales (sin rango = histórico).
+   * Usado por el corte bimestral y por el filtro de periodo de la tarjeta "Matrículas cobradas".
+   */
+  matriculasCobradas(rango: { desde?: string; hasta?: string } = {}, gruposPermitidos?: string[]): MatriculaCorte[] {
+    const desde = rango.desde || '0000-01-01';
+    const hasta = rango.hasta || '9999-12-31';
+    const claveCache = `matriculas_cobradas_${desde}_${hasta}_${
+      gruposPermitidos ? gruposPermitidos.slice().sort().join(',') : 'todos'
+    }`;
+    const cached = cacheService.get<MatriculaCorte[]>(claveCache);
+    if (cached) return cached;
+
+    const grupoPorId = new Map(this.getGrupos().map((g) => [g.id, g]));
+    const resultado: MatriculaCorte[] = this.getSolicitudesMatricula()
+      .filter((s) => {
+        if (!s.solvente) return false;
+        const fecha = fechaPagoLocal(s);
+        if (!fecha || fecha < desde || fecha > hasta) return false;
+        return !gruposPermitidos || (!!s.grupo_id && gruposPermitidos.includes(s.grupo_id));
+      })
+      .map((s) => ({
+        id: s.id,
+        codigo_solicitud: s.codigo_solicitud,
+        tipo_tramite: s.tipo_tramite,
+        alumno: `${s.nombre_alumno} ${s.apellido_alumno}`.trim(),
+        grupo_id: s.grupo_id,
+        grupo_nombre: grupoPorId.get(s.grupo_id)?.nombre ?? s.grupo_nombre,
+        fecha_pago: fechaPagoLocal(s),
+        monto: Number(s.monto_arancel) || 0,
+        numero_recibo_caja: s.numero_recibo_caja,
+        metodo_pago: s.metodo_pago,
+      }));
+    cacheService.set(claveCache, resultado, 60000, ['matriculas', 'grupos']);
+    return resultado;
+  }
+
   calcularCorteBimestral(corteId: string, gruposPermitidos?: string[]): ResultadoCorte | null {
     const corte = this.getCortes().find((c) => c.id === corteId);
     if (!corte) return null;
@@ -3162,20 +3200,10 @@ class StorageService {
     const altas = delCorte.filter((m) => m.tipo === 'ALTA_TALLER' || m.tipo === 'REACTIVACION_ALUMNO');
     const bajas = delCorte.filter((m) => m.tipo === 'BAJA_TALLER' || m.tipo === 'BAJA_ALUMNO');
 
-    const matriculas: MatriculaCorte[] = pagadas
-      .filter((s) => enCorte(fechaPagoLocal(s)) && permitido(s.grupo_id))
-      .map((s) => ({
-        id: s.id,
-        codigo_solicitud: s.codigo_solicitud,
-        tipo_tramite: s.tipo_tramite,
-        alumno: `${s.nombre_alumno} ${s.apellido_alumno}`.trim(),
-        grupo_id: s.grupo_id,
-        grupo_nombre: grupoPorId.get(s.grupo_id)?.nombre ?? s.grupo_nombre,
-        fecha_pago: fechaPagoLocal(s),
-        monto: Number(s.monto_arancel) || 0,
-        numero_recibo_caja: s.numero_recibo_caja,
-        metodo_pago: s.metodo_pago,
-      }));
+    const matriculas = this.matriculasCobradas(
+      { desde: corte.fecha_inicio, hasta: corte.fecha_fin },
+      gruposPermitidos
+    );
 
     // ---- Resumen por taller (todos los talleres visibles, más los eliminados con alumnos en el corte) ----
     const idsTalleres = new Set<string>([

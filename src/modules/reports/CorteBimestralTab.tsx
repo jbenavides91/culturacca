@@ -59,6 +59,41 @@ const CHIP_MES: Record<EstadoMesCorte, { texto: string; clase: string; titulo: s
 
 const card = 'bg-white dark:bg-[#1B222D] rounded-xl border border-[#E7EAF0] dark:border-[#2B3442] shadow-xs';
 
+/** Periodo de la tarjeta "Matrículas cobradas" (independiente del corte elegido) */
+type PeriodoMat = 'ANIO_ACTUAL' | 'CORTE' | 'ANIO' | 'TODO' | 'RANGO';
+interface FiltroMat {
+  periodo: PeriodoMat;
+  anio: string;
+  desde: string;
+  hasta: string;
+}
+const CLAVE_FILTRO_MAT = 'cca_corte_matriculas_periodo';
+const PERIODOS_MAT: { valor: PeriodoMat; texto: string }[] = [
+  { valor: 'ANIO_ACTUAL', texto: 'Año en curso' },
+  { valor: 'CORTE', texto: 'Corte' },
+  { valor: 'ANIO', texto: 'Año' },
+  { valor: 'TODO', texto: 'Histórico' },
+  { valor: 'RANGO', texto: 'Rango' },
+];
+
+const leerFiltroMat = (anioActual: string): FiltroMat => {
+  const base: FiltroMat = { periodo: 'ANIO_ACTUAL', anio: anioActual, desde: '', hasta: '' };
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_FILTRO_MAT) || 'null');
+    if (guardado && PERIODOS_MAT.some((p) => p.valor === guardado.periodo)) {
+      return {
+        periodo: guardado.periodo,
+        anio: /^\d{4}$/.test(String(guardado.anio)) ? String(guardado.anio) : anioActual,
+        desde: typeof guardado.desde === 'string' ? guardado.desde : '',
+        hasta: typeof guardado.hasta === 'string' ? guardado.hasta : '',
+      };
+    }
+  } catch {
+    // almacenamiento no disponible
+  }
+  return base;
+};
+
 export const CorteBimestralTab: React.FC<Props> = ({ currentProfile }) => {
   const [cortes, setCortes] = useState<CorteBimestral[]>([]);
   const [corteId, setCorteId] = useState('');
@@ -108,12 +143,81 @@ export const CorteBimestralTab: React.FC<Props> = ({ currentProfile }) => {
       : lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || String(b.creado_en).localeCompare(String(a.creado_en)));
   }, [datos, ordenMov]);
 
-  const matriculas = useMemo(() => {
-    if (!datos) return [];
-    return esAlfabetico(ordenMat)
-      ? ordenarAlfabetico(datos.matriculas, (m) => [m.alumno], ordenMat)
-      : [...datos.matriculas].sort((a, b) => b.fecha_pago.localeCompare(a.fecha_pago));
-  }, [datos, ordenMat]);
+  // ---- Filtro de periodo de "Matrículas cobradas" (por defecto, el año en curso) ----
+  const anioActual = hoy.slice(0, 4);
+  const [filtroMat, setFiltroMat] = useState<FiltroMat>(() => leerFiltroMat(anioActual));
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_FILTRO_MAT, JSON.stringify(filtroMat));
+    } catch {
+      // almacenamiento no disponible
+    }
+  }, [filtroMat]);
+  const cambiarFiltroMat = (patch: Partial<FiltroMat>) => setFiltroMat((f) => ({ ...f, ...patch }));
+
+  // Años con matrículas cobradas, más el año en curso (más reciente primero)
+  const aniosMat = useMemo(() => {
+    const anios = new Set(storageService.matriculasCobradas().map((m) => m.fecha_pago.slice(0, 4)));
+    anios.add(anioActual);
+    return [...anios].sort((a, b) => b.localeCompare(a));
+  }, [anioActual, version]);
+
+  const rangoInvalido = filtroMat.periodo === 'RANGO' && !!filtroMat.desde && !!filtroMat.hasta && filtroMat.hasta < filtroMat.desde;
+  const { rangoMat, etiquetaMat } = useMemo((): {
+    rangoMat: { desde?: string; hasta?: string } | null;
+    etiquetaMat: string;
+  } => {
+    const corteActual = cortes.find((c) => c.id === corteSeleccionado);
+    switch (filtroMat.periodo) {
+      case 'CORTE':
+        return corteActual
+          ? { rangoMat: { desde: corteActual.fecha_inicio, hasta: corteActual.fecha_fin }, etiquetaMat: `Corte ${corteActual.nombre}` }
+          : { rangoMat: null, etiquetaMat: 'Corte' };
+      case 'ANIO':
+        return { rangoMat: { desde: `${filtroMat.anio}-01-01`, hasta: `${filtroMat.anio}-12-31` }, etiquetaMat: `Año ${filtroMat.anio}` };
+      case 'TODO':
+        return { rangoMat: {}, etiquetaMat: 'Todo el histórico' };
+      case 'RANGO': {
+        const { desde, hasta } = filtroMat;
+        const etiqueta =
+          desde && hasta
+            ? `${fechaCorta(desde)} – ${fechaCorta(hasta)}`
+            : desde
+            ? `Desde ${fechaCorta(desde)}`
+            : hasta
+            ? `Hasta ${fechaCorta(hasta)}`
+            : 'Todo el histórico';
+        return { rangoMat: { desde: desde || undefined, hasta: hasta || undefined }, etiquetaMat: etiqueta };
+      }
+      default:
+        return { rangoMat: { desde: `${anioActual}-01-01`, hasta: `${anioActual}-12-31` }, etiquetaMat: `Año ${anioActual}` };
+    }
+  }, [filtroMat, cortes, corteSeleccionado, anioActual]);
+
+  const matriculasPeriodo = useMemo(
+    () => (rangoMat && !rangoInvalido ? storageService.matriculasCobradas(rangoMat) : []),
+    // version cambia con cada notificación de datos: fuerza el recálculo
+    [rangoMat, rangoInvalido, version]
+  );
+  const montoMatriculas = matriculasPeriodo.reduce((s, m) => s + m.monto, 0);
+
+  const matriculas = useMemo(
+    () =>
+      esAlfabetico(ordenMat)
+        ? ordenarAlfabetico(matriculasPeriodo, (m) => [m.alumno], ordenMat)
+        : [...matriculasPeriodo].sort((a, b) => b.fecha_pago.localeCompare(a.fecha_pago)),
+    [matriculasPeriodo, ordenMat]
+  );
+
+  // Con varios años en la lista (histórico o rango largo) se agrupa por año, el más reciente primero
+  const gruposPorAnio = useMemo(() => {
+    const mapa = new Map<string, typeof matriculas>();
+    matriculas.forEach((m) => {
+      const anio = m.fecha_pago.slice(0, 4);
+      mapa.set(anio, [...(mapa.get(anio) ?? []), m]);
+    });
+    return [...mapa.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [matriculas]);
 
   const alternar = (grupoId: string) =>
     setAbiertos((prev) => {
@@ -159,8 +263,8 @@ export const CorteBimestralTab: React.FC<Props> = ({ currentProfile }) => {
       icono: Receipt,
       color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40',
       titulo: 'Matrículas cobradas',
-      valor: String(resumen.matriculasCobradas),
-      nota: formatearMonto(resumen.montoMatriculas),
+      valor: String(matriculasPeriodo.length),
+      nota: `${formatearMonto(montoMatriculas)} · ${etiquetaMat}`,
     },
     {
       icono: ArrowUpRight,
@@ -199,7 +303,7 @@ export const CorteBimestralTab: React.FC<Props> = ({ currentProfile }) => {
         </p>
         <button
           type="button"
-          onClick={() => exportService.exportCorteBimestral(datos)}
+          onClick={() => exportService.exportCorteBimestral(datos, { lista: matriculasPeriodo, etiqueta: etiquetaMat })}
           className="sm:ml-auto px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
         >
           <FileSpreadsheet className="w-4 h-4" />
@@ -410,40 +514,134 @@ export const CorteBimestralTab: React.FC<Props> = ({ currentProfile }) => {
 
         {/* Matrículas cobradas */}
         <div className={`${card} overflow-hidden`}>
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#E7EAF0] dark:border-[#2B3442] flex items-center gap-2">
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Matrículas cobradas</h3>
-              <p className="text-[11px] text-[#667085] dark:text-[#94A3B8]">
-                {resumen.matriculasCobradas} matrícula(s) · {formatearMonto(resumen.montoMatriculas)}
-              </p>
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#E7EAF0] dark:border-[#2B3442] space-y-2.5">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-[#172033] dark:text-[#F1F5F9]">Matrículas cobradas</h3>
+                <p className="text-[11px] text-[#667085] dark:text-[#94A3B8]">
+                  <span className="font-semibold text-[#172033] dark:text-[#F1F5F9]">{etiquetaMat}</span> ·{' '}
+                  {matriculasPeriodo.length} matrícula(s) · {formatearMonto(montoMatriculas)}
+                </p>
+              </div>
+              <OrdenSelector
+                className="ml-auto"
+                value={ordenMat}
+                onChange={setOrdenMat}
+                extra={[{ value: 'RECIENTES', label: 'Pago más reciente' }]}
+              />
             </div>
-            <OrdenSelector
-              className="ml-auto"
-              value={ordenMat}
-              onChange={setOrdenMat}
-              extra={[{ value: 'RECIENTES', label: 'Pago más reciente' }]}
-            />
+
+            {/* Filtro de periodo (independiente del corte elegido arriba) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Periodo de las matrículas">
+                {PERIODOS_MAT.map((p) => {
+                  const activo = filtroMat.periodo === p.valor;
+                  return (
+                    <button
+                      key={p.valor}
+                      type="button"
+                      aria-pressed={activo}
+                      onClick={() => cambiarFiltroMat({ periodo: p.valor })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer ${
+                        activo
+                          ? 'bg-[#4F46E5] border-[#4F46E5] text-white'
+                          : 'bg-white dark:bg-[#151A22] border-[#E7EAF0] dark:border-[#2B3442] text-[#475467] dark:text-[#CBD5E1] hover:border-[#4F46E5]'
+                      }`}
+                    >
+                      {p.texto}
+                    </button>
+                  );
+                })}
+              </div>
+              {filtroMat.periodo === 'ANIO' && (
+                <select
+                  value={filtroMat.anio}
+                  onChange={(e) => cambiarFiltroMat({ anio: e.target.value })}
+                  aria-label="Año"
+                  className="px-2 py-1 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-[11px] font-semibold text-[#172033] dark:text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] cursor-pointer"
+                >
+                  {(aniosMat.includes(filtroMat.anio) ? aniosMat : [filtroMat.anio, ...aniosMat]).map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {filtroMat.periodo === 'RANGO' && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667085] dark:text-[#94A3B8]">
+                <label className="flex items-center gap-1">
+                  Desde
+                  <input
+                    type="date"
+                    value={filtroMat.desde}
+                    onChange={(e) => cambiarFiltroMat({ desde: e.target.value })}
+                    className="px-2 py-1 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-[#172033] dark:text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
+                  />
+                </label>
+                <label className="flex items-center gap-1">
+                  Hasta
+                  <input
+                    type="date"
+                    value={filtroMat.hasta}
+                    onChange={(e) => cambiarFiltroMat({ hasta: e.target.value })}
+                    className="px-2 py-1 bg-[#F7F8FA] dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-lg text-[#172033] dark:text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
+                  />
+                </label>
+                {(filtroMat.desde || filtroMat.hasta) && (
+                  <button
+                    type="button"
+                    onClick={() => cambiarFiltroMat({ desde: '', hasta: '' })}
+                    className="text-[#4F46E5] dark:text-[#818CF8] hover:underline cursor-pointer"
+                  >
+                    Limpiar fechas
+                  </button>
+                )}
+                {rangoInvalido && (
+                  <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                    La fecha «Hasta» es anterior a «Desde».
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           {matriculas.length === 0 ? (
             <p className="py-8 text-center text-xs text-[#667085] dark:text-[#94A3B8]">
-              No se cobraron matrículas en este corte.
+              {rangoInvalido
+                ? 'Corrija el rango de fechas.'
+                : `No hay matrículas cobradas en ${
+                    etiquetaMat.startsWith('Año ') ? etiquetaMat.slice(4) : etiquetaMat.charAt(0).toLowerCase() + etiquetaMat.slice(1)
+                  }.`}
             </p>
           ) : (
             <ul className="divide-y divide-[#E7EAF0] dark:divide-[#2B3442] max-h-96 overflow-y-auto">
-              {matriculas.map((m) => (
-                <li key={m.id} className="px-4 sm:px-6 py-2.5 text-xs flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#172033] dark:text-[#F1F5F9] truncate">{m.alumno}</p>
-                    <p className="text-[11px] text-[#667085] dark:text-[#94A3B8] truncate">
-                      {m.grupo_nombre} · {m.tipo_tramite === 'RENOVACION_ANUAL' ? 'Renovación' : 'Nueva'}
-                      {m.numero_recibo_caja ? ` · Recibo ${m.numero_recibo_caja}` : ''}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold tabular-nums text-[#172033] dark:text-[#F1F5F9]">{formatearMonto(m.monto)}</p>
-                    <p className="text-[10px] text-[#667085] dark:text-[#94A3B8]">{fechaCorta(m.fecha_pago)}</p>
-                  </div>
-                </li>
+              {gruposPorAnio.map(([anio, lista]) => (
+                <React.Fragment key={anio}>
+                  {gruposPorAnio.length > 1 && (
+                    <li className="sticky top-0 z-[1] px-4 sm:px-6 py-1.5 bg-[#F7F8FA] dark:bg-[#151A22] flex items-center justify-between text-[11px] font-bold text-[#172033] dark:text-[#F1F5F9]">
+                      <span>{anio}</span>
+                      <span className="font-semibold text-[#667085] dark:text-[#94A3B8] tabular-nums">
+                        {lista.length} · {formatearMonto(lista.reduce((s, m) => s + m.monto, 0))}
+                      </span>
+                    </li>
+                  )}
+                  {lista.map((m) => (
+                    <li key={m.id} className="px-4 sm:px-6 py-2.5 text-xs flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[#172033] dark:text-[#F1F5F9] truncate">{m.alumno}</p>
+                        <p className="text-[11px] text-[#667085] dark:text-[#94A3B8] truncate">
+                          {m.codigo_solicitud} · {m.grupo_nombre} ·{' '}
+                          {m.tipo_tramite === 'RENOVACION_ANUAL' ? 'Renovación' : 'Nueva'}
+                          {m.numero_recibo_caja ? ` · Recibo ${m.numero_recibo_caja}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-bold tabular-nums text-[#172033] dark:text-[#F1F5F9]">{formatearMonto(m.monto)}</p>
+                        <p className="text-[10px] text-[#667085] dark:text-[#94A3B8]">{fechaCorta(m.fecha_pago)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </React.Fragment>
               ))}
             </ul>
           )}
