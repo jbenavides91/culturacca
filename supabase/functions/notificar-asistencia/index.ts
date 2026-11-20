@@ -134,7 +134,43 @@ interface DatosAviso {
   fecha: string;
   nuevoEstatus?: string;
   motivo?: string;
+  contador?: ContadorCorte;
 }
+
+/** Ausencias del alumno en este taller dentro del corte de la sesión (sesiones cerradas) */
+interface ContadorCorte {
+  ausencias: number;
+  justificadas: number;
+  /** "el corte Nov–Dic 2026" o "el ciclo" */
+  periodo: string;
+  limite: number;
+}
+
+/** Caja del contador (HTML con estilos en línea, compatible con Gmail y Outlook) */
+function cajaContador(c: ContadorCorte): string {
+  const critico = c.limite > 0 && c.ausencias >= c.limite;
+  const color = critico ? '#b91c1c' : '#b45309';
+  const fondo = critico ? '#fef2f2' : '#fffbeb';
+  const borde = critico ? '#fecaca' : '#fde68a';
+  const etiqueta = `${c.ausencias === 1 ? 'Ausencia' : 'Ausencias'} en ${c.periodo}`;
+  const justif =
+    c.justificadas > 0
+      ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">(${c.justificadas} ${c.justificadas === 1 ? 'justificada' : 'justificadas'} aparte)</div>`
+      : '';
+  return `
+      <table role="presentation" style="margin:16px 0 0;border-collapse:separate;background:${fondo};border:1px solid ${borde};border-radius:6px;">
+        <tr>
+          <td style="padding:10px 4px 10px 16px;font-size:28px;font-weight:800;color:${color};line-height:1;vertical-align:middle;">${c.ausencias}</td>
+          <td style="padding:10px 16px 10px 8px;vertical-align:middle;">
+            <div style="font-size:13px;font-weight:700;color:${color};">${escaparHtml(etiqueta)}</div>${justif}
+          </td>
+        </tr>
+      </table>`;
+}
+
+const textoContador = (c: ContadorCorte) =>
+  `${c.ausencias === 1 ? 'Ausencia' : 'Ausencias'} en ${c.periodo}: ${c.ausencias}` +
+  (c.justificadas > 0 ? ` (${c.justificadas} ${c.justificadas === 1 ? 'justificada' : 'justificadas'} aparte)` : '');
 
 /**
  * Texto acordado con la coordinación (2026-11-19). El aviso de ausencia reproduce el texto entregado;
@@ -173,6 +209,7 @@ function construirAviso(d: DatosAviso): { asunto: string; html: string; texto: s
     encabezadoDatos,
     '',
     ...datos.map(([k, v]) => `${k}: ${v}`),
+    ...(d.contador ? ['', textoContador(d.contador)] : []),
     '',
     'Agradecemos su atención.',
     '',
@@ -201,7 +238,7 @@ function construirAviso(d: DatosAviso): { asunto: string; html: string; texto: s
       <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#1e293b;">${encabezadoDatos}</p>
       <table style="width:100%;font-size:13px;color:#1e293b;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">
         ${filas}
-      </table>
+      </table>${d.contador ? cajaContador(d.contador) : ''}
       <p style="margin:20px 0 0;font-size:14px;">Agradecemos su atención.</p>
       <p style="margin:20px 0 0;font-size:13px;color:#1e293b;">
         <strong>Coordinación de Cultura</strong><br/>${escaparHtml(d.institucion)}
@@ -228,6 +265,78 @@ interface Aviso {
   tutorEmail: string;
   nuevoEstatus?: string;
   motivo?: string;
+  contador?: ContadorCorte;
+}
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+/**
+ * Cuenta ausencias y justificadas por alumno en las sesiones cerradas del taller dentro del corte
+ * de la fecha de la sesión (misma regla que `corteVigente` en la app: el corte que la contiene, si no
+ * el último ya iniciado, si no todo el ciclo). Si algo falla devuelve null y el correo sale sin caja.
+ */
+async function contarAusenciasDelCorte(
+  admin: SupabaseClient,
+  grupoId: string,
+  fechaSesion: string,
+  idsAlumno: string[],
+  limite: number
+): Promise<Map<string, ContadorCorte> | null> {
+  try {
+    const { data: cortes, error: errCortes } = await admin
+      .from('cortes_bimestrales')
+      .select('nombre, fecha_inicio, fecha_fin')
+      .order('fecha_inicio', { ascending: true });
+    if (errCortes) return null;
+    const lista = cortes ?? [];
+    const corte =
+      lista.find((c) => String(c.fecha_inicio) <= fechaSesion && fechaSesion <= String(c.fecha_fin)) ??
+      [...lista].reverse().find((c) => String(c.fecha_inicio) <= fechaSesion) ??
+      null;
+
+    let periodo = 'el ciclo';
+    if (corte) {
+      const nombre = String(corte.nombre ?? '').trim();
+      if (nombre) {
+        periodo = `el corte ${nombre}`;
+      } else {
+        const [yi, mi] = String(corte.fecha_inicio).split('-').map(Number);
+        const [yf, mf] = String(corte.fecha_fin).split('-').map(Number);
+        periodo = `el corte ${MESES_CORTOS[mi - 1]}${yi !== yf ? ` ${yi}` : ''}–${MESES_CORTOS[mf - 1]} ${yf}`;
+      }
+    }
+
+    let consultaSesiones = admin.from('sesiones').select('id').eq('grupo_id', grupoId).eq('cerrada', true);
+    if (corte) {
+      consultaSesiones = consultaSesiones
+        .gte('fecha', String(corte.fecha_inicio))
+        .lte('fecha', String(corte.fecha_fin));
+    }
+    const { data: sesiones, error: errSes } = await consultaSesiones;
+    if (errSes) return null;
+    const idsSesion = (sesiones ?? []).map((s) => String(s.id));
+
+    const resultado = new Map<string, ContadorCorte>();
+    idsAlumno.forEach((id) => resultado.set(id, { ausencias: 0, justificadas: 0, periodo, limite }));
+    if (idsSesion.length === 0) return resultado;
+
+    const { data: marcas, error: errAs } = await admin
+      .from('asistencias')
+      .select('estudiante_id, estatus')
+      .in('sesion_id', idsSesion)
+      .in('estudiante_id', idsAlumno)
+      .in('estatus', ['AUSENTE', 'JUSTIFICADO']);
+    if (errAs) return null;
+    for (const m of marcas ?? []) {
+      const c = resultado.get(String(m.estudiante_id));
+      if (!c) continue;
+      if (m.estatus === 'AUSENTE') c.ausencias++;
+      else c.justificadas++;
+    }
+    return resultado;
+  } catch {
+    return null;
+  }
 }
 
 async function manejar(req: Request): Promise<Response> {
@@ -371,8 +480,22 @@ async function manejar(req: Request): Promise<Response> {
   if (pendientes.length === 0) return json({ ok: true, enviados: 0, errores: 0, omitidos });
 
   // 5. Enviar
-  const { data: config } = await admin.from('configuracion').select('nombre_institucion').limit(1).maybeSingle();
+  const { data: config } = await admin
+    .from('configuracion')
+    .select('nombre_institucion, limite_ausencias_alerta')
+    .limit(1)
+    .maybeSingle();
   const institucion = String(config?.nombre_institucion || 'Colegio Centro América');
+
+  // Contador de ausencias del corte (opcional: si falla, el aviso sale sin él)
+  const contadores = await contarAusenciasDelCorte(
+    admin,
+    String(sesion.grupo_id),
+    String(sesion.fecha),
+    [...new Set(pendientes.map((p) => p.estudianteId))],
+    Number(config?.limite_ausencias_alerta ?? 3)
+  );
+  if (contadores) pendientes.forEach((p) => (p.contador = contadores.get(p.estudianteId)));
   const taller = String(grupo?.nombre || 'Taller');
   const fecha = fechaCorta(String(sesion.fecha));
   const remitente = remitenteNoResponder(Deno.env.get('MAIL_FROM_NAME') || institucion, gmailUser);
@@ -423,6 +546,7 @@ async function enviarLote(
       fecha: o.fecha,
       nuevoEstatus: aviso.nuevoEstatus,
       motivo: aviso.motivo,
+      contador: aviso.contador,
     });
 
     let error: string | null = null;
