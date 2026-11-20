@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Estudiante, Grupo, SolicitudMatricula, SugerenciaAlumno } from '../../types/attendance';
 import { gradosDisponibles } from '../../utils/grados';
+import { normalizarTexto } from '../../utils/padron';
 import { storageService } from '../../services/storage.service';
 import { generateInstitutionalContractText } from '../../utils/contractTemplate';
 import { arancelDeGrupo, etiquetaPeriodo, formatearMonto, montoDeSolicitud } from '../../utils/arancel';
@@ -115,6 +116,41 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
 
   // Available workshops
   const grupos = useMemo(() => storageService.getGrupos(), []);
+
+  // Búsqueda de talleres del paso 2 (sin tildes ni mayúsculas; deben aparecer todas las palabras)
+  const [busquedaTaller, setBusquedaTaller] = useState('');
+  const textoBuscableTaller = useMemo(() => {
+    const perfiles = storageService.getPerfiles();
+    const mapa = new Map<string, string>();
+    grupos.forEach((g) => {
+      const prof = perfiles.find((p) => p.id === g.profesor_id);
+      const dias = g.dias_semana || [];
+      mapa.set(
+        g.id,
+        normalizarTexto(
+          [
+            g.nombre,
+            prof ? `${prof.nombre} ${prof.apellido}` : '',
+            g.aula || 'Taller Principal',
+            `${g.hora_inicio} ${g.hora_fin}`,
+            dias.map((d) => DIAS_LABELS[d] || '').join(' '),
+            dias.map((d) => (DIAS_LABELS[d] || '').slice(0, 3)).join(' '),
+          ].join(' ')
+        )
+      );
+    });
+    return mapa;
+  }, [grupos]);
+  const terminosTaller = normalizarTexto(busquedaTaller).split(/\s+/).filter(Boolean);
+  // Los ya seleccionados se muestran siempre, para poder desmarcarlos
+  const gruposVisibles =
+    terminosTaller.length === 0
+      ? grupos
+      : grupos.filter(
+          (g) =>
+            selectedGrupoIds.includes(g.id) ||
+            terminosTaller.every((t) => (textoBuscableTaller.get(g.id) ?? '').includes(t))
+        );
 
   // Autocompletado desde alumnos registrados y el padrón del colegio (Configuración → Padrón)
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
@@ -877,9 +913,63 @@ export const NewEnrollmentWizardModal: React.FC<NewEnrollmentWizardModalProps> =
                 )}
               </div>
 
+              {/* Búsqueda de talleres */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-[#98A2B3] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="search"
+                    value={busquedaTaller}
+                    onChange={(e) => setBusquedaTaller(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.preventDefault();
+                      if (e.key === 'Escape' && busquedaTaller) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setBusquedaTaller('');
+                      }
+                    }}
+                    placeholder="Buscar taller, docente, salón, día u hora..."
+                    aria-label="Buscar talleres"
+                    className="w-full pl-8 pr-8 py-2 bg-white dark:bg-[#151A22] border border-[#E7EAF0] dark:border-[#2B3442] rounded-xl text-xs text-[#172033] dark:text-[#F1F5F9] placeholder-[#98A2B3] focus:outline-none focus:ring-1 focus:ring-[#4F46E5] [&::-webkit-search-cancel-button]:hidden"
+                  />
+                  {busquedaTaller && (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaTaller('')}
+                      title="Limpiar búsqueda"
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-[#98A2B3] hover:text-[#475467] dark:hover:text-[#E2E8F0] cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#667085] dark:text-[#94A3B8] shrink-0">
+                  {terminosTaller.length > 0
+                    ? `${gruposVisibles.length} de ${grupos.length} talleres`
+                    : `${grupos.length} taller${grupos.length === 1 ? '' : 'es'}`}
+                </p>
+              </div>
+
+              {gruposVisibles.length === 0 && (
+                <div className="text-center py-8 rounded-xl border border-dashed border-[#E7EAF0] dark:border-[#2B3442] space-y-2">
+                  <p className="text-xs font-semibold text-[#172033] dark:text-[#F1F5F9]">
+                    Ningún taller coincide con «{busquedaTaller.trim()}»
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaTaller('')}
+                    className="text-xs text-[#4F46E5] dark:text-[#818CF8] hover:underline cursor-pointer"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </div>
+              )}
+
               {/* Workshops Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2">
-                {grupos.map((grupo) => {
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {gruposVisibles.map((grupo) => {
                   const ordenSeleccion = selectedGrupoIds.indexOf(grupo.id);
                   const isSelected = ordenSeleccion !== -1;
                   const diasTexto = (grupo.dias_semana || [])
