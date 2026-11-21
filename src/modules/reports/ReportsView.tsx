@@ -15,7 +15,7 @@ type ReportTab = 'asistencia' | 'recibos' | 'corte' | 'anecdotario' | 'permanenc
 
 const TABS: Record<ReportTab, { label: string; icon: React.ElementType }> = {
   asistencia: { label: 'Matriz de Asistencia', icon: CalendarCheck },
-  recibos: { label: 'Historial de Recibos y Pagos Contables', icon: Receipt },
+  recibos: { label: 'Historial de Matrícula', icon: Receipt },
   corte: { label: 'Corte bimestral', icon: CalendarRange },
   anecdotario: { label: 'Anecdotario', icon: NotebookPen },
   permanencia: { label: 'Permanencia', icon: History },
