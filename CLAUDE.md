@@ -300,7 +300,7 @@ Callers:
       - Each cell shows faltas/sesiones, "+NJ", the indiscipline count, and a color for the level. "—" means no closed sessions and no notes.
     - The print view prints the active view with the period's name. Excel calls `exportConsolidatedExcel(grupo, permitidos, { desde, hasta, etiqueta })`.
     - Dates are parsed from `YYYY-MM-DD` as local dates.
-  - **Historial de Matrícula** (`ReceiptsHistoryTab`, formerly "Historial de Recibos y Pagos Contables"): ADMIN and CAJERO. CAJERO sees only this tab and Corte bimestral.
+  - **Historial de Matrícula** (`ReceiptsHistoryTab`, formerly "Historial de Recibos y Pagos Contables"): ADMIN and CAJERO. CAJERO sees only this tab and Corte bimestral. For CAJERO, the same name labels the Reportes entry in `Sidebar`, the `Topbar` title, the role description in `rbac.ts` and the restricted-access notice in `App.tsx` (all were "Historial de Recibos" until 2026-11-20). The internal tab id is still `recibos`.
     - It filters by payment date: Todo (default), Hoy, Esta semana, Este mes, or Rango (Desde/Hasta, both optional).
     - The date is the local date of `fecha_pago`, falling back to `fecha_aceptacion`, the same rule as Caja. Records without either date appear only under "Todo".
     - Text search applies on top of the date filter.
