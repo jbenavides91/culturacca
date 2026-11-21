@@ -3672,6 +3672,51 @@ class StorageService {
     return { ok: true, destinatario: data?.destinatario };
   }
 
+  /**
+   * Regenera y descarga el PDF del contrato firmado de una solicitud (el mismo que recibe el
+   * tutor por correo). Lo construye la Edge Function `correo-matricula` con `modo: 'descargar'`
+   * a partir de la base de datos; no envía correo ni modifica la solicitud.
+   */
+  async descargarContratoMatricula(solicitudId: string): Promise<{ ok: boolean; error?: string }> {
+    await syncStore.flush();
+
+    const { data, error } = await supabase.functions.invoke<{
+      ok?: boolean;
+      nombre?: string;
+      pdf_base64?: string;
+      error?: string;
+    }>('correo-matricula', { body: { solicitud_id: solicitudId, modo: 'descargar' } });
+
+    let mensaje: string | undefined = data?.error;
+    if (error) {
+      mensaje = error.message;
+      const context = (error as { context?: unknown }).context;
+      if (context instanceof Response) {
+        try {
+          const payload = (await context.json()) as { error?: string };
+          if (payload?.error) mensaje = payload.error;
+        } catch {
+          // ignorar
+        }
+      }
+    }
+    if (mensaje) return { ok: false, error: mensaje };
+    if (!data?.pdf_base64) return { ok: false, error: 'La función no devolvió el contrato.' };
+
+    const binario = atob(data.pdf_base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = data.nombre || `Contrato-${solicitudId}.pdf`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    return { ok: true };
+  }
+
   validarChecklistCaja(
     id: string,
     validadoDatos: boolean,

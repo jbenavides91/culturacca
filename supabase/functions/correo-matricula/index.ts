@@ -6,6 +6,10 @@
 // a partir de la base de datos, así que la función no sirve para mandar correos arbitrarios.
 // Puede invocarla un perfil activo con rol ADMIN, MATRICULA o CAJERO.
 //
+// Con `modo: 'descargar'` solo devuelve el PDF del contrato firmado ({ nombre, pdf_base64 }):
+// no envía correo, no escribe en la base y no necesita los secretos de Gmail
+// (Reportes → Historial de Matrícula → "Contrato").
+//
 // Secretos: GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_FROM_NAME (opcional), ALLOWED_ORIGINS.
 // Despliegue: MCP deploy_edge_function (name correo-matricula, verify_jwt: false).
 
@@ -349,7 +353,7 @@ async function manejar(req: Request): Promise<Response> {
     .eq('id', userData.user.id)
     .maybeSingle();
   if (!caller || caller.activo === false || !ROLES_PERMITIDOS.includes(String(caller.rol))) {
-    return json({ error: 'No tiene permiso para enviar correos de matrícula.' }, 403);
+    return json({ error: 'No tiene permiso para los contratos ni los correos de matrícula.' }, 403);
   }
 
   let body: Json;
@@ -360,6 +364,9 @@ async function manejar(req: Request): Promise<Response> {
   }
   const solicitudId = String(body.solicitud_id ?? '').trim();
   if (!solicitudId) return json({ error: 'Falta la solicitud de matrícula.' }, 400);
+  // 'enviar' (por defecto): correo al tutor con el PDF adjunto.
+  // 'descargar': solo devuelve el PDF del contrato firmado; no envía ni escribe nada.
+  const modo = body.modo === 'descargar' ? 'descargar' : 'enviar';
 
   // 2. Cargar la solicitud y sus datos relacionados
   const { data: sol, error: solError } = await admin
@@ -369,6 +376,36 @@ async function manejar(req: Request): Promise<Response> {
     .maybeSingle();
   if (solError) return json({ error: solError.message }, 500);
   if (!sol) return json({ error: 'La solicitud de matrícula no existe (¿aún no se guardó?).' }, 404);
+
+  const codigo = String(sol.codigo_solicitud || solicitudId);
+  const alumno = `${sol.nombre_alumno ?? ''} ${sol.apellido_alumno ?? ''}`.trim();
+  const pdfDeContrato = (institucion: string) =>
+    generarPdfContrato({
+      institucion,
+      codigo,
+      fechaSolicitud: fechaLarga(sol.fecha_solicitud),
+      alumno,
+      contrato: String(sol.contrato_texto),
+      firmaDataUrl: typeof sol.firma_digital_url === 'string' && sol.firma_digital_url.startsWith('data:image/')
+        ? sol.firma_digital_url
+        : null,
+      firmante: String(sol.firmante_nombre || sol.tutor_nombre || ''),
+      fechaFirma: fechaLarga(sol.fecha_firma || sol.fecha_solicitud),
+    });
+
+  if (modo === 'descargar') {
+    if (!sol.contrato_firmado || !sol.contrato_texto) {
+      return json({ error: 'La solicitud no tiene un contrato firmado.' }, 400);
+    }
+    const { data: config } = await admin.from('configuracion').select('nombre_institucion').limit(1).maybeSingle();
+    try {
+      const pdf = await pdfDeContrato(String(config?.nombre_institucion || 'Colegio Centro América'));
+      return json({ ok: true, nombre: `Contrato-${codigo}.pdf`, pdf_base64: Buffer.from(pdf).toString('base64') });
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : 'error desconocido';
+      return json({ error: `No se pudo generar el contrato: ${mensaje}` }, 500);
+    }
+  }
 
   const destinatario = String(sol.tutor_email ?? '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
@@ -402,7 +439,6 @@ async function manejar(req: Request): Promise<Response> {
     : { data: null };
 
   const institucion = String(config?.nombre_institucion || 'Colegio Centro América');
-  const alumno = `${sol.nombre_alumno ?? ''} ${sol.apellido_alumno ?? ''}`.trim();
   const taller = String(grupo?.nombre || sol.grupo_nombre || '');
   const horario = grupo
     ? `${((grupo.dias_semana as number[]) || []).map((d) => DIAS[d] || '').filter(Boolean).join(', ')} · ${grupo.hora_inicio} – ${grupo.hora_fin}`
@@ -414,22 +450,10 @@ async function manejar(req: Request): Promise<Response> {
       ? Number(grupo?.costo)
       : Number(config?.arancel_taller) || 0;
   const tramite = sol.tipo_tramite === 'RENOVACION_ANUAL' ? 'Renovación de matrícula' : 'Nueva matrícula';
-  const codigo = String(sol.codigo_solicitud || solicitudId);
 
   try {
     // 3. PDF del contrato y correo
-    const pdf = await generarPdfContrato({
-      institucion,
-      codigo,
-      fechaSolicitud: fechaLarga(sol.fecha_solicitud),
-      alumno,
-      contrato: String(sol.contrato_texto),
-      firmaDataUrl: typeof sol.firma_digital_url === 'string' && sol.firma_digital_url.startsWith('data:image/')
-        ? sol.firma_digital_url
-        : null,
-      firmante: String(sol.firmante_nombre || sol.tutor_nombre || ''),
-      fechaFirma: fechaLarga(sol.fecha_firma || sol.fecha_solicitud),
-    });
+    const pdf = await pdfDeContrato(institucion);
 
     const html = construirCorreo({
       institucion,
