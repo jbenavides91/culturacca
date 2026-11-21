@@ -146,7 +146,7 @@ export default function App() {
               </h2>
               <p className="text-xs text-[#667085] dark:text-[#94A3B8] leading-relaxed">
                 {activeProfile.rol === 'CAJERO'
-                  ? 'El rol de Caja solo tiene acceso a Caja y Solvencia y al Historial de Recibos en Reportes.'
+                  ? 'El rol de Caja solo tiene acceso a Caja y Solvencia y al Historial de Matrícula en Reportes.'
                   : activeProfile.rol === 'PROFESOR'
                   ? 'El rol de Docente tiene acceso exclusivo a Toma de Asistencia, Mis talleres y Reporte de Asistencia.'
                   : activeProfile.rol === 'MATRICULA'

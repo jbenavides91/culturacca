@@ -73,7 +73,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         return currentProfile.rol === 'PROFESOR'
           ? 'Reporte de Asistencia'
           : currentProfile.rol === 'CAJERO'
-          ? 'Historial de Recibos'
+          ? 'Historial de Matrícula'
           : 'Reportes y Matriz';
       case 'config':
         return 'Configuración';

@@ -55,7 +55,7 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
     ],
     defaultTab: 'caja',
     roleBadgeLabel: 'Caja y Solvencia',
-    roleDescription: 'Acceso exclusivo a Caja y Solvencia y al Historial de Recibos en Reportes.',
+    roleDescription: 'Acceso exclusivo a Caja y Solvencia y al Historial de Matrícula en Reportes.',
     canViewExecutiveDashboard: false,
     canManageTeachers: false,
     canManageWorkshops: false,

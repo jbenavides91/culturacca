@@ -139,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             },
             {
               id: 'reportes',
-              label: 'Historial de Recibos',
+              label: 'Historial de Matrícula',
               icon: <FileSpreadsheet className="w-4 h-4 shrink-0" />,
             },
           ],
