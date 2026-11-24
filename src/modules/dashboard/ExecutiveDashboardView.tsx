@@ -45,7 +45,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
       {/* Executive Welcome & Header */}
       <div className="pb-3 sm:pb-6 border-b border-[#E7EAF0] dark:border-[#2B3442]">
         <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-[#172033] dark:text-[#F1F5F9]">
-          Dashboard
+          Área de Cultura
         </h1>
       </div>
 
