@@ -15,10 +15,12 @@ import { storageService } from '../../services/storage.service';
 import { Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
 import { fechaLocalISO } from '../../utils/fechas';
 import {
+  construirFilasEstatus,
   ESTADOS,
   EstadoToma,
   FilaEstatus,
   finDeMes,
+  horaLocal,
   inicioDeMes,
   lunesDe,
   sumarDias,
@@ -60,8 +62,6 @@ const leerVistaGuardada = (): Vista => {
 
 /** Fecha local en formato YYYY-MM-DD (no UTC, para no saltar de día por la tarde) */
 const fechaLocal = fechaLocalISO;
-
-const horaLocal = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 function rangoDePeriodo(periodo: Periodo, desde: string, hasta: string, hoy: Date): [string, string] {
   const hoyStr = fechaLocal(hoy);
@@ -152,55 +152,10 @@ export const AttendanceStatusPanel: React.FC<AttendanceStatusPanelProps> = ({
   }, [grupos, perfiles]);
 
   // Calcular el estado de cada sesión
-  const filas = useMemo<FilaEstatus[]>(() => {
-    const grupoPorId = new Map(grupos.map((g) => [g.id, g]));
-    const perfilPorId = new Map(perfiles.map((p) => [p.id, p]));
-
-    // Alumnos activos inscritos por taller
-    const inscritosPorGrupo = new Map<string, Set<string>>();
-    grupos.forEach((g) => {
-      const ids = storageService
-        .getEstudiantesByGrupo(g.id)
-        .filter((e) => e.estado !== 'BAJA')
-        .map((e) => e.id);
-      inscritosPorGrupo.set(g.id, new Set(ids));
-    });
-
-    // Alumnos con asistencia registrada por sesión
-    const marcadosPorSesion = new Map<string, Set<string>>();
-    asistencias.forEach((a) => {
-      if (!marcadosPorSesion.has(a.sesion_id)) marcadosPorSesion.set(a.sesion_id, new Set());
-      marcadosPorSesion.get(a.sesion_id)!.add(a.estudiante_id);
-    });
-
-    return sesiones
-      .filter((s) => grupoPorId.has(s.grupo_id))
-      .map((s) => {
-        const grupo = grupoPorId.get(s.grupo_id)!;
-        const inscritosSet = inscritosPorGrupo.get(grupo.id) ?? new Set<string>();
-        const marcadosSet = marcadosPorSesion.get(s.id) ?? new Set<string>();
-        const marcados = Array.from(marcadosSet).filter((id) => inscritosSet.has(id)).length;
-        const inscritos = inscritosSet.size;
-        const prof = perfilPorId.get(grupo.profesor_id);
-
-        let estadoSesion: EstadoToma;
-        if (s.cerrada) estadoSesion = 'CERRADA';
-        else if (s.fecha > hoyStr || (s.fecha === hoyStr && s.hora_inicio > horaActual)) estadoSesion = 'PROGRAMADA';
-        else if (inscritos === 0) estadoSesion = 'SIN_ALUMNOS';
-        else if (marcados === 0) estadoSesion = 'PENDIENTE';
-        else if (marcados < inscritos) estadoSesion = 'PARCIAL';
-        else estadoSesion = 'TOMADA';
-
-        return {
-          sesion: s,
-          grupo,
-          docente: prof ? `${prof.nombre} ${prof.apellido}` : 'Sin docente asignado',
-          inscritos,
-          marcados,
-          estado: estadoSesion,
-        };
-      });
-  }, [grupos, sesiones, asistencias, perfiles, hoyStr, horaActual]);
+  const filas = useMemo<FilaEstatus[]>(
+    () => construirFilasEstatus(grupos, sesiones, asistencias, perfiles, hoyStr, horaActual),
+    [grupos, sesiones, asistencias, perfiles, hoyStr, horaActual]
+  );
 
   // Rango activo: el período elegido en Lista, o la semana / el mes mostrados en el calendario
   const [inicio, fin] =

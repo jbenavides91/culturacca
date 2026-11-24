@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, CircleDashed, Clock, Lock, UserX } from 'lucide-react';
-import { Grupo, Sesion } from '../../types/attendance';
+import { Asistencia, Grupo, Perfil, Sesion } from '../../types/attendance';
+import { storageService } from '../../services/storage.service';
 
 export type EstadoToma = 'CERRADA' | 'TOMADA' | 'PARCIAL' | 'PENDIENTE' | 'PROGRAMADA' | 'SIN_ALUMNOS';
 
@@ -49,6 +50,71 @@ export const ESTADOS: Record<EstadoToma, { label: string; className: string; ico
 
 /** Estados en los que el panel ofrece abrir Toma de Asistencia */
 export const puedePasarLista = (e: EstadoToma) => e === 'PENDIENTE' || e === 'PARCIAL' || e === 'TOMADA';
+
+/** Hora local HH:MM */
+export const horaLocal = (d: Date) =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+/**
+ * Estado de toma de asistencia de cada sesión (Cerrada / Programada / Sin alumnos /
+ * Pendiente / Parcial / Tomada), contando solo alumnos inscritos que no están de BAJA.
+ */
+export function construirFilasEstatus(
+  grupos: Grupo[],
+  sesiones: Sesion[],
+  asistencias: Asistencia[],
+  perfiles: Perfil[],
+  hoyStr: string,
+  horaActual: string
+): FilaEstatus[] {
+  const grupoPorId = new Map(grupos.map((g) => [g.id, g]));
+  const perfilPorId = new Map(perfiles.map((p) => [p.id, p]));
+
+  // Alumnos activos inscritos por taller
+  const inscritosPorGrupo = new Map<string, Set<string>>();
+  grupos.forEach((g) => {
+    const ids = storageService
+      .getEstudiantesByGrupo(g.id)
+      .filter((e) => e.estado !== 'BAJA')
+      .map((e) => e.id);
+    inscritosPorGrupo.set(g.id, new Set(ids));
+  });
+
+  // Alumnos con asistencia registrada por sesión
+  const marcadosPorSesion = new Map<string, Set<string>>();
+  asistencias.forEach((a) => {
+    if (!marcadosPorSesion.has(a.sesion_id)) marcadosPorSesion.set(a.sesion_id, new Set());
+    marcadosPorSesion.get(a.sesion_id)!.add(a.estudiante_id);
+  });
+
+  return sesiones
+    .filter((s) => grupoPorId.has(s.grupo_id))
+    .map((s) => {
+      const grupo = grupoPorId.get(s.grupo_id)!;
+      const inscritosSet = inscritosPorGrupo.get(grupo.id) ?? new Set<string>();
+      const marcadosSet = marcadosPorSesion.get(s.id) ?? new Set<string>();
+      const marcados = Array.from(marcadosSet).filter((id) => inscritosSet.has(id)).length;
+      const inscritos = inscritosSet.size;
+      const prof = perfilPorId.get(grupo.profesor_id);
+
+      let estado: EstadoToma;
+      if (s.cerrada) estado = 'CERRADA';
+      else if (s.fecha > hoyStr || (s.fecha === hoyStr && s.hora_inicio > horaActual)) estado = 'PROGRAMADA';
+      else if (inscritos === 0) estado = 'SIN_ALUMNOS';
+      else if (marcados === 0) estado = 'PENDIENTE';
+      else if (marcados < inscritos) estado = 'PARCIAL';
+      else estado = 'TOMADA';
+
+      return {
+        sesion: s,
+        grupo,
+        docente: prof ? `${prof.nombre} ${prof.apellido}` : 'Sin docente asignado',
+        inscritos,
+        marcados,
+        estado,
+      };
+    });
+}
 
 export const formatearFecha = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number);
